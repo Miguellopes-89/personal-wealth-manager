@@ -1,0 +1,29 @@
+# Ignore temporary and system files
+~lock.*#
+.DS_Store
+Thumbs.db
+*.tmp
+
+# LibreOffice/Excel temporary files
+.~lock*
+*.bak
+*.swp
+*.swo
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python cache (if validating)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# OS
+.DS_Store
+.windows-build-tools
