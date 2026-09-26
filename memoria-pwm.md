@@ -85,10 +85,40 @@ Onde se preenche um mês de cada vez.
 - O aviso "Non-standard file format" ao gravar no LibreOffice é normal — escolher sempre "Use Excel 2010-365 Spreadsheet Format" para manter `.xlsx`.
 - O utilizador ajustou manualmente larguras de coluna após a entrega — o ficheiro em `C:\Users\User\Projetos\Personal Wealth Manager\Personal Wealth Manager.xlsx` é a versão de referência (quando a integração Filesystem está ativa) ou o último `.xlsx` descarregado do chat (quando não está).
 
+## GitHub Launch (26/09/2026)
+
+**Repositório:** `https://github.com/Miguellopes-89/personal-wealth-manager`
+
+**Estado:** Público, pronto para partilhar no portfólio.
+
+**Ficheiros pushados:**
+- `README.md` — Design narrative (problema, solução estrutural, decisões, trade-offs)
+- `memoria-pwm.md` — Este ficheiro (estado do projeto entre sessões)
+- `Personal_Wealth_Manager_template.xlsx` — Template vazio (3 folhas: Dashboard, Registo Mensal, Dados; sem dados pessoais)
+- `docs/setup.md` — Primeiros passos (requisitos, instalação, primeira utilização)
+- `docs/workflow-mensal.md` — Ciclo mensal em 5 passos + checklist + troubleshooting
+- `docs/extensao.md` — Como adicionar novo ativo (com exemplos: Ethereum, Neon, etc.)
+- `.gitignore` — Ignora ficheiros temporários, lock files, dados pessoais
+- `LICENSE` — MIT (auto-criado pelo GitHub)
+
+**Processo:** Init local via PowerShell → merge de `LICENSE` remoto com `--allow-unrelated-histories` → push a `origin/main`.
+
+**Propósito no portfólio:** Demonstra modelação de dados (formato longo, decisões arquiteturais), documentação transparente (trade-offs explícitos), pragmatismo (ferramenta acessível resolve problema real), manutenibilidade (estrutura extensível, lógica centralizada).
+
 ## Em aberto / possíveis próximos passos
 
+- **Manual do utilizador** — documento mais amigável (como usar, passo-a-passo visual) diferente dos docs técnicos (setup, workflow, extensão). Bom para end-users.
+- **Screenshot do Dashboard** no README — quando o projeto ficar "maduro" (com mais dados).
 - **Folha "Configuração" com lista centralizada de ativos/categorias**, ligada por validação de dados a "Registo Mensal" — reduziria o risco de erro de digitação e centralizaria a manutenção quando se adiciona uma plataforma nova. Ainda não implementada (~30 min de esforço estimado).
 - **Comentário de definição na fórmula `Ganho/Perda`** documentando exatamente o que representa (variação de saldo não explicada por aportes registados) — útil sobretudo se um dia se começar a registar dividendos/juros separadamente.
 - Confirmar se os Criptoativos devem entrar (com valor aproximado) nos pontos históricos de 2024/2025, atualmente excluídos por falta de dado de fecho fiável.
 - Validar com o utilizador o resultado visual dos gráficos no Dashboard (cores, disposição) — ainda sem feedback.
+- **Possível migração futura para CSV + Python** se houver interesse de contribuições da comunidade (atualmente é GitHub como portfólio + ferramenta usável localmente, sem expectativa de PRs no `.xlsx`).
 - **Lembrete de processo**: sempre que se propuser um passo manual ao utilizador que envolva selecionar um intervalo de células, confirmar a matemática do intervalo antes de o escrever (o erro da correção nº 7a foi exatamente isto — instrução verbal inconsistente com a referência de células dada).
+
+## Gestão de Sessões
+
+Para poupar tokens e manter a memória limpa:
+- Cada sessão tem um título em kebab-case no final
+- Sessões focadas num tópico (ex. uma correção, um novo documento, um refactor)
+- Atualizar `memoria-pwm.md` ao final de cada sessão com o estado novo
