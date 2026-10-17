@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guardar e sair · Personal Wealth Manager</title>
+<style>
+  /* Estilo provisório: o design Monarch fica para a sessão 5. */
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 3rem auto; padding: 0 1rem; color: #1b1f24; }
+  .banner { padding: .8rem 1rem; border-radius: 6px; margin: 1rem 0; }
+  .banner.erro { background: #fdecea; color: #922b21; }
+  .banner.ok { background: #e8f6ec; color: #1e6b36; }
+  .sub { color: #5b6570; font-size: .9rem; }
+</style>
+</head>
+<body>
+{% if erro %}
+  <h1>Não foi possível guardar</h1>
+  <div class="banner erro">{{ erro }}</div>
+  <p>A aplicação <strong>continua aberta</strong> e nada foi fechado. Resolve o problema e tenta outra vez.</p>
+  <p><a href="/">&larr; Voltar</a></p>
+{% else %}
+  <h1>Guardado</h1>
+  <div class="banner ok">Cópia de segurança criada: {{ copia }}</div>
+  <p>A aplicação está a fechar. Já podes fechar este separador.</p>
+  <p class="sub">Para voltar a abrir, usa o <code>pwm.bat</code>.</p>
+{% endif %}
+</body>
+</html>

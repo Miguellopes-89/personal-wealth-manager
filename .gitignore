@@ -1,0 +1,20 @@
+# Ambiente e caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Dados pessoais: nunca vão para o GitHub
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+backup/
+
+# Notas de projeto com detalhes pessoais
+estado-projeto.md
+scripts/seed_pessoal.py
+
+# Segredos
+.env
