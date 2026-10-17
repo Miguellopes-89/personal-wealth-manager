@@ -110,4 +110,4 @@ tests/           testes (pytest)
 
 ## Licença
 
-A definir.
+[MIT](LICENSE).
