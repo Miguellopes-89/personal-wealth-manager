@@ -44,9 +44,9 @@
     <tr class="{{ '' if p.ativa else 'inativa' }}">
       <td>{{ p.nome }}<div class="sub">{{ p.titular }}{% if p.finalidade %} · {{ p.finalidade }}{% endif %}{% if not p.ativa %} · inativa{% endif %}</div></td>
       <td>{{ dict(categorias).get(p.categoria, p.categoria) }}</td>
-      <td class="num">{% if p.desafio_inicio %}Desafio 52 sem.{% else %}{{ p.plano_mensal_cent|eur }}{% endif %}</td>
+      <td class="num">{% if p.desafio_inicio %}Desafio 52 sem.{% elif p.plano_mensal_cent %}{{ p.plano_mensal_cent|eur }}{% else %}—{% endif %}</td>
       <td>{{ 'sim' if p.calcula_ganho else 'não' }} · {{ 'sim' if p.entra_alocacao else 'não' }}</td>
-      <td>{{ p.n_registos }}{% if p.ultimo_mes %} <span class="sub">(último {{ p.ultimo_mes }})</span>{% endif %}</td>
+      <td>{{ p.n_registos }}{% if p.ultimo_mes %} <span class="sub">(último {{ p.ultimo_mes|mes }})</span>{% endif %}</td>
       <td><a href="/plataformas/{{ p.id }}">Editar</a></td>
     </tr>
   {% else %}
@@ -104,7 +104,7 @@
     <strong>Desativar</strong>
     <p class="sub">Deixa de aparecer no check-in e nos cartões. O histórico fica no painel.</p>
     {% if ultimo and ultimo.saldo_cent != 0 %}
-    <p class="sub">Só se desativa uma conta fechada: o último registo ({{ ultimo.mes }}) tem {{ ultimo.saldo_cent|eur }}. No check-in em que o dinheiro já estiver no destino, grava aqui saldo 0 com o levantamento como aporte negativo, e lá o mesmo valor como aporte. Depois volta a esta página.</p>
+    <p class="sub">Só se desativa uma conta fechada: o último registo ({{ ultimo.mes|mes }}) tem {{ ultimo.saldo_cent|eur }}. No check-in em que o dinheiro já estiver no destino, grava aqui saldo 0 com o levantamento como aporte negativo, e lá o mesmo valor como aporte. Depois volta a esta página.</p>
     {% endif %}
     <button type="submit"{% if ultimo and ultimo.saldo_cent != 0 %} disabled{% endif %}>Desativar</button>
   </form>

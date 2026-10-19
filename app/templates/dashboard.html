@@ -37,16 +37,16 @@
 <div class="banner">Ainda não há registos. Cria as <a href="/plataformas">plataformas</a> e faz o primeiro <a href="/checkin">check-in mensal</a>.</div>
 {% else %}
 {% set t = painel.totais %}
-<p class="sub">Dados de {{ painel.mes }} · <a href="/checkin">Check-in mensal</a> · <a href="/plataformas">Plataformas</a></p>
+<p class="sub">Dados de {{ painel.mes|mes }} · <a href="/checkin">Check-in mensal</a> · <a href="/plataformas">Plataformas</a></p>
 {% if painel.desatualizado %}
-<div class="banner">O último check-in é de {{ painel.mes }}; ainda não há o de {{ painel.mes_atual }}. <a href="/checkin">Fazer check-in</a></div>
+<div class="banner">O último check-in é de {{ painel.mes|mes }}; ainda não há o de {{ painel.mes_atual|mes }}. <a href="/checkin">Fazer check-in</a></div>
 {% endif %}
 
 <div class="kpis">
   <div class="kpi">
     <div class="sub">Património total</div>
     <div class="valor">{{ t.patrimonio_cent|eur }}</div>
-    <div class="sub">em {{ painel.mes }} (inclui contas desativadas até ao último registo)</div>
+    <div class="sub">em {{ painel.mes|mes }} (inclui contas desativadas até ao último registo)</div>
   </div>
   <div class="kpi">
     <div class="sub">Variação face ao mês anterior</div>
@@ -97,9 +97,9 @@
 {% for c in painel.cartoes %}
   <div class="cartao">
     <div class="nome">{{ c.nome }}</div>
-    <div class="sub">{{ rotulos.get(c.categoria, c.categoria) }} · {{ c.titular }}</div>
+    <div class="sub">{{ c.categoria|categoria }} · {{ c.titular }}</div>
     <div class="saldo">{% if c.saldo_cent is none %}sem registo{% else %}{{ c.saldo_cent|eur }}{% endif %}</div>
-    {% if not c.registado and c.saldo_cent is not none %}<div class="sub aviso">sem registo em {{ painel.mes }}: saldo do último registo</div>{% endif %}
+    {% if not c.registado and c.saldo_cent is not none %}<div class="sub aviso">sem registo em {{ painel.mes|mes }}: saldo do último registo</div>{% endif %}
     <div class="linha"><span class="sub">Ganho do mês</span>
       <span>{% if c.ganho_cent is none %}—{% else %}<span class="{{ 'pos' if c.ganho_cent > 0 else 'neg' if c.ganho_cent < 0 }}">{{ '+' if c.ganho_cent > 0 }}{{ c.ganho_cent|eur }}</span>{% endif %}</span></div>
     <div class="linha"><span class="sub">Aporte{% if c.plano_cent is not none %} (plano {{ c.plano_cent|eur }}){% endif %}</span>
@@ -119,7 +119,7 @@
   <div class="sub">Sem Desafio das 52 semanas ativo.</div>
   {% endfor %}
   {% set em_falta = painel.cartoes|selectattr('em_falta')|list %}
-  <div style="margin-top:1rem"><strong>Aportes em falta em {{ painel.mes }}</strong></div>
+  <div style="margin-top:1rem"><strong>Aportes em falta em {{ painel.mes|mes }}</strong></div>
   {% if em_falta %}
   <ul class="simples">
     {% for c in em_falta %}
@@ -160,7 +160,7 @@ if (typeof Chart === 'undefined') {
   new Chart(document.getElementById('graf-evolucao'), {
     type: 'bar',
     data: {
-      labels: dados.meses,
+      labels: dados.meses.map(m => m.slice(5) + '-' + m.slice(0, 4)),  // AAAA-MM -> MM-AAAA
       datasets: dados.evolucao.map(s => ({ label: s.rotulo, data: s.valores_cent, backgroundColor: CORES[s.categoria], stack: 'patrimonio' }))
     },
     options: {
@@ -182,7 +182,8 @@ if (typeof Chart === 'undefined') {
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { tooltip: { callbacks: { label: ctx => ctx.label + ': ' + eur(ctx.parsed) } } }
+        // A legenda fica na lista por baixo do gráfico (com valor e percentagem).
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.label + ': ' + eur(ctx.parsed) } } }
       }
     });
   }

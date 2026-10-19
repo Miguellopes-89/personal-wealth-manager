@@ -130,4 +130,25 @@ def test_mes_ja_gravado_abre_com_a_data_gravada(cliente):
 def test_ecra_diz_onde_vai_gravar(cliente):
     _plataforma()
     r = cliente.get(f"/checkin?mes={MES}&data=2026-01-20")
-    assert "Vai gravar em <strong>2026-01</strong>, leitura de <strong>2026-01-20</strong>" in r.text
+    assert "Vai gravar em <strong>01-2026</strong>, leitura de <strong>20-01-2026</strong>" in r.text
+
+
+def test_ecra_agrupa_as_semanas_do_desafio_por_mes(cliente):
+    _bondora_com_leitura_anterior()
+    r = cliente.get(f"/checkin?mes={MES}")  # domingos 4, 11, 18 e 25 de janeiro: 10 €
+    assert "<summary>01-2026 · 10,00 €</summary>" in r.text
+    assert r.text.count("<details") == 1
+
+
+def test_ecra_mostra_o_nome_da_categoria_e_nao_o_codigo(cliente):
+    _plataforma()  # categoria 'viagens'
+    r = cliente.get(f"/checkin?mes={MES}")
+    assert "Viagens · Miguel" in r.text
+
+
+def test_sair_pede_confirmacao_com_valores_por_gravar(cliente):
+    _plataforma()
+    r = cliente.get(f"/checkin?mes={MES}")
+    assert 'id="form-sair"' in r.text and "confirm(" in r.text
+    # o script liga-se ao formulário pelo id: o formulário tem de existir antes de o script correr
+    assert r.text.index('id="form-sair"') < r.text.index("getElementById('form-sair')")

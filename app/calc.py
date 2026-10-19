@@ -41,6 +41,12 @@ def mes_para_indice(mes: str) -> int:
     return ano * 12 + (m - 1)
 
 
+def formatar_mes(mes: str) -> str:
+    """'2026-09' -> '09-2026', o formato dos meses no ecrã (os dados e os formulários ficam em AAAA-MM)."""
+    mes_para_indice(mes)  # valida o formato (levanta ValueError)
+    return f"{mes[5:7]}-{mes[:4]}"
+
+
 def calcular_ganho(saldo_cent: int, saldo_anterior_cent: int | None, aporte_cent: int) -> int | None:
     """ganho = saldo - saldo anterior - aporte. Sem registo anterior não há ganho."""
     if saldo_anterior_cent is None:

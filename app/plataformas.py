@@ -181,7 +181,7 @@ def desativar(conn: sqlite3.Connection, plataforma_id: int) -> None:
         ultimo = ultimo_saldo(conn, plataforma_id)
         if ultimo is not None and ultimo["saldo_cent"] != 0:
             raise ValueError(
-                f"O último registo ({ultimo['mes']}) tem saldo diferente de 0. Para fechar a conta, grava no "
+                f"O último registo ({calc.formatar_mes(ultimo['mes'])}) tem saldo diferente de 0. Para fechar a conta, grava no "
                 "check-in o saldo 0 com o levantamento como aporte negativo (e o mesmo valor como aporte na "
                 "plataforma de destino); depois desativa-a."
             )

@@ -35,6 +35,28 @@ class Sugestao:
     def total_cent(self) -> int:
         return sum(s.valor_cent for s in self.semanas)
 
+    @property
+    def por_mes(self) -> tuple["GrupoMes", ...]:
+        """As semanas agrupadas pelo mês do domingo (AAAA-MM), por ordem: uma linha por mês no check-in."""
+        grupos: dict[str, list[Semana]] = {}
+        for s in self.semanas:
+            grupos.setdefault(f"{s.data:%Y-%m}", []).append(s)
+        return tuple(GrupoMes(mes, tuple(ss)) for mes, ss in grupos.items())
+
+
+@dataclass(frozen=True)
+class GrupoMes:
+    mes: str  # AAAA-MM
+    semanas: tuple[Semana, ...]
+
+    @property
+    def total_cent(self) -> int:
+        return sum(s.valor_cent for s in self.semanas)
+
+    @property
+    def tem_dia_da_leitura(self) -> bool:
+        return any(s.dia_da_leitura for s in self.semanas)
+
 
 def _proximo_domingo(d: date) -> date:
     """O primeiro domingo em ou depois de `d`."""

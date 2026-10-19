@@ -23,7 +23,7 @@ from app import checkin, db, planos
 PLATAFORMAS = [
     ("Conta Corrente", "conta_corrente", "Conjunto", 0, 0, 0),
     ("Conta Trânsito", "transito", "Ana", 0, 0, 0),
-    ("Fundo de Emergência", "emergencia", "Conjunto", 0, 1, 0),
+    ("Fundo de Liberdade", "emergencia", "Conjunto", 0, 1, 0),
     ("Conta Viagens", "viagens", "Ana", 20, 1, 0),
     ("Plataforma P2P", "p2p", "Ana", 0, 1, 0),
     ("Corretora ETF A", "investimento", "Ana", 50, 1, 1),
@@ -41,7 +41,7 @@ LEITURAS = [date(2026, 7, 1), date(2026, 8, 1), date(2026, 9, 1)]
 
 # Plataformas com ganho: saldo inicial (€) e rendimento mensal fictício.
 INICIAL_EUR = {
-    "Fundo de Emergência": 3000,
+    "Fundo de Liberdade": 3000,
     "Conta Viagens": 150,
     "Plataforma P2P": 1200,
     "Corretora ETF A": 2500,
@@ -51,7 +51,7 @@ INICIAL_EUR = {
     "PPR Exemplo B": 3500,
 }
 TAXA_MENSAL = {
-    "Fundo de Emergência": 0.002,
+    "Fundo de Liberdade": 0.002,
     "Conta Viagens": 0.001,
     "Plataforma P2P": 0.005,
     "Corretora ETF A": 0.006,

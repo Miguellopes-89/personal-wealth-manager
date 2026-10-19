@@ -87,7 +87,7 @@ def validar_mes(mes: str, hoje: date | None = None) -> None:
     indice = calc.mes_para_indice(mes)  # levanta ValueError se o formato for inválido
     limite = calc.mes_para_indice(mes_de(hoje or date.today()))
     if indice > limite:
-        raise ValueError(f"Mês no futuro: {mes}")
+        raise ValueError(f"Mês no futuro: {calc.formatar_mes(mes)}")
 
 
 def data_por_defeito(mes: str, hoje: date | None = None) -> date:
@@ -103,7 +103,7 @@ def data_por_defeito(mes: str, hoje: date | None = None) -> date:
 def validar_data_leitura(data: date, mes: str, hoje: date | None = None) -> None:
     """A leitura tem de ser desse mês e não pode estar no futuro."""
     if mes_de(data) != mes:
-        raise ValueError(f"A data da leitura ({data:%d/%m/%Y}) não pertence ao mês {mes}")
+        raise ValueError(f"A data da leitura ({data:%d/%m/%Y}) não pertence ao mês {calc.formatar_mes(mes)}")
     if data > (hoje or date.today()):
         raise ValueError(f"Data da leitura no futuro: {data:%d/%m/%Y}")
 

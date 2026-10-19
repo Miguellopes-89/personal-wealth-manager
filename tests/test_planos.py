@@ -103,3 +103,19 @@ def test_rendimento_nao_calculavel():
     assert planos.rendimento_anualizado(100, 0, 19) is None
     assert planos.rendimento_anualizado(100, 1000, 0) is None
     assert planos.aviso_rendimento(100, 0, 19) is None
+
+
+def test_sugestao_agrupada_por_mes():
+    s = planos.sugerir_desafio(date(2026, 10, 13), date(2026, 11, 1))
+    grupos = s.por_mes
+    assert [(g.mes, g.total_cent, [w.numero for w in g.semanas]) for g in grupos] == [
+        ("2026-10", 8500, [42, 43]),
+        ("2026-11", 4400, [44]),
+    ]
+    assert [g.tem_dia_da_leitura for g in grupos] == [False, True]
+    assert sum(g.total_cent for g in grupos) == s.total_cent
+
+
+def test_sugestao_sem_semanas_nao_tem_meses():
+    s = planos.sugerir_desafio(date(2026, 10, 19), date(2026, 10, 24))
+    assert s.semanas == () and s.por_mes == ()

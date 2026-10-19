@@ -24,6 +24,8 @@
   button { font-size: 1rem; padding: .55rem 1.2rem; cursor: pointer; }
   .destino { margin: .5rem 0; }
   button:disabled { cursor: not-allowed; opacity: .5; }
+  details.mes-plano summary { cursor: pointer; }
+  details.mes-plano > div { padding-left: 1rem; }
   form.mes { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 </style>
 </head>
@@ -44,7 +46,7 @@
 
 {% if resultado %}
 <div class="banner ok">
-  Gravado: {{ resultado.gravados|length }} plataforma(s) em {{ mes }}.
+  Gravado: {{ resultado.gravados|length }} plataforma(s) em {{ mes|mes }}.
   {% if resultado.ignorados %}{{ resultado.ignorados|length }} sem saldo preenchido (não alteradas).{% endif %}
 </div>
 {% if resultado.gravados %}
@@ -84,11 +86,11 @@
       <tr>
         <td>
           {{ l.nome }}
-          <div class="sub">{{ l.categoria|replace('_', ' ') }} · {{ l.titular }}{% if not l.calcula_ganho %} · só saldo{% endif %}{% if l.registado %} · já registado{% endif %}</div>
+          <div class="sub">{{ l.categoria|categoria }} · {{ l.titular }}{% if not l.calcula_ganho %} · só saldo{% endif %}{% if l.registado %} · já registado{% endif %}</div>
           {% if item.erro %}<div class="msg-erro">{{ item.erro }}</div>{% endif %}
         </td>
         <td class="num ref">
-          {% if l.saldo_anterior_cent is none %}sem registo{% else %}{{ l.saldo_anterior_cent|eur }} <div class="sub">{{ l.mes_anterior }}</div>{% endif %}
+          {% if l.saldo_anterior_cent is none %}sem registo{% else %}{{ l.saldo_anterior_cent|eur }} <div class="sub">{{ l.mes_anterior|mes }}</div>{% endif %}
         </td>
         <td class="num"><input type="text" inputmode="decimal" autocomplete="off" name="saldo_{{ l.plataforma_id }}" value="{{ item.saldo }}" placeholder="—"{% if item.erro %} class="erro"{% endif %}></td>
         <td class="num">
@@ -96,8 +98,14 @@
           {% if l.sugestao %}
           <div class="sub">
             Plano: {{ l.sugestao.total_cent|eur }}{% if not l.sugestao.semanas %} (nenhum domingo desde {{ l.data_leitura_anterior.strftime('%d/%m') }}){% endif %}
-            {% for s in l.sugestao.semanas %}
-            <br>sem. {{ s.numero }} · {{ s.data.strftime('%d/%m') }} · {{ s.valor_cent|eur }}{% if s.dia_da_leitura %} <span class="aviso">(dia da leitura: confirma que já está no saldo)</span>{% endif %}
+            {% for g in l.sugestao.por_mes %}
+            <details class="mes-plano">
+              <summary>{{ g.mes|mes }} · {{ g.total_cent|eur }}</summary>
+              {% for s in g.semanas %}
+              <div>sem. {{ s.numero }} · {{ s.data.strftime('%d/%m') }} · {{ s.valor_cent|eur }}</div>
+              {% endfor %}
+            </details>
+            {% if g.tem_dia_da_leitura %}<div class="aviso">Inclui o domingo do dia da leitura: confirma que já está no saldo.</div>{% endif %}
             {% endfor %}
           </div>
           {% elif l.nota_plano %}
@@ -109,9 +117,14 @@
     </tbody>
   </table>
   <p class="sub">Vírgula para os cêntimos (12,50). Saldo em branco = plataforma não alterada. Levantamentos: aporte negativo (-100,00).</p>
-  <p class="destino">Vai gravar em <strong>{{ mes }}</strong>, leitura de <strong>{{ data_leitura }}</strong>.</p>
+  <p class="destino">Vai gravar em <strong>{{ mes|mes }}</strong>, leitura de <strong>{{ data_leitura[8:10] }}-{{ data_leitura[5:7] }}-{{ data_leitura[:4] }}</strong>.</p>
   <p id="aviso-mudanca" class="banner erro" hidden>Mudaste o mês ou a data lá em cima: carrega em <strong>Abrir</strong> antes de gravar (o aporte sugerido depende deles).</p>
   <button type="submit" id="gravar">Gravar check-in</button>
+</form>
+<hr>
+<form method="post" action="/sair" id="form-sair">
+  <button type="submit">Guardar e sair</button>
+  <span class="sub">Faz a cópia de segurança e fecha a aplicação.</span>
 </form>
 <script>
 // Os campos do topo só contam depois de "Abrir": até lá, não deixa gravar com o mês ou a data antigos.
@@ -125,11 +138,17 @@
   };
   topo.mes.addEventListener('input', verificar); topo.data.addEventListener('input', verificar);
 })();
+// "Guardar e sair" grava a cópia de segurança, não o check-in: avisa se há valores escritos e por gravar.
+(() => {
+  const campos = [...document.querySelectorAll('input[name^="saldo_"], input[name^="aporte_"]')];
+  const iniciais = new Map(campos.map(c => [c, c.value]));
+  document.getElementById('form-sair').addEventListener('submit', ev => {
+    const porGravar = campos.some(c => c.value !== iniciais.get(c));
+    if (porGravar && !confirm('Há valores escritos que ainda não foram gravados. Sair mesmo assim? (Perdem-se.)')) {
+      ev.preventDefault();
+    }
+  });
+})();
 </script>
-<hr>
-<form method="post" action="/sair">
-  <button type="submit">Guardar e sair</button>
-  <span class="sub">Faz a cópia de segurança e fecha a aplicação.</span>
-</form>
 </body>
 </html>

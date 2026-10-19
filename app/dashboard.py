@@ -24,7 +24,7 @@ from app import calc, checkin, db, planos
 ROTULOS_CATEGORIA = {
     "conta_corrente": "Conta corrente",
     "transito": "Trânsito",
-    "emergencia": "Fundo de emergência",
+    "emergencia": "Fundo de liberdade",
     "viagens": "Viagens",
     "p2p": "P2P",
     "investimento": "Investimento",

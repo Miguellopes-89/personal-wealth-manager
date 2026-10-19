@@ -1,5 +1,6 @@
 import pytest
 
+from app import calc
 from app.calc import (
     AVISO_GANHO_NEGATIVO,
     AVISO_MES_EM_FALTA,
@@ -143,3 +144,14 @@ def test_euros_para_cent_rejeita(mau):
 )
 def test_formatar_euros(cent, esperado):
     assert formatar_euros(cent) == esperado
+
+
+def test_formatar_mes_para_o_ecra():
+    assert calc.formatar_mes("2026-09") == "09-2026"
+    assert calc.formatar_mes("2027-12") == "12-2027"
+
+
+@pytest.mark.parametrize("mau", ["09-2026", "2026-13", "2026-9", ""])
+def test_formatar_mes_rejeita_formato_invalido(mau):
+    with pytest.raises(ValueError):
+        calc.formatar_mes(mau)

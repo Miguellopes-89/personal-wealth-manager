@@ -17,6 +17,8 @@ from app import backup, calc, checkin, dashboard, db, plataformas
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["eur"] = calc.formatar_euros
+templates.env.filters["mes"] = calc.formatar_mes
+templates.env.filters["categoria"] = lambda c: dashboard.ROTULOS_CATEGORIA.get(c, c)
 
 AVISOS = {
     calc.AVISO_GANHO_NEGATIVO: "Ganho negativo: confirma o saldo e o aporte (erro de registo ou perda real).",
