@@ -9,4 +9,4 @@ def test_pagina_inicial_responde(monkeypatch, tmp_path):
         resposta = cliente.get("/")
     assert resposta.status_code == 200
     assert "Personal Wealth Manager" in resposta.text
-    assert "Plataformas na base de dados: 0" in resposta.text
+    assert "Ainda não há registos" in resposta.text

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visão geral · Personal Wealth Manager</title>
+<style>
+  /* Estilo provisório: o design Monarch fica para a sessão 7. */
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; color: #1b1f24; }
+  h1 { margin-bottom: .25rem; }
+  h2 { font-size: 1.05rem; margin: 2rem 0 .6rem; }
+  .sub { color: #5b6570; font-size: .85rem; }
+  .aviso { color: #9a6700; font-size: .85rem; }
+  .pos { color: #1e6b36; }
+  .neg { color: #c0392b; }
+  .banner { padding: .6rem .9rem; border-radius: 6px; margin: 1rem 0; background: #fff4d6; color: #7a5200; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; margin-top: 1rem; }
+  .kpi, .cartao, .painel-caixa { border: 1px solid #e3e6ea; border-radius: 10px; padding: .9rem 1rem; background: #fff; }
+  .kpi .valor { font-size: 1.7rem; font-weight: 600; margin: .15rem 0; }
+  .graficos { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }
+  .moldura { position: relative; height: 320px; }
+  .cartoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .8rem; }
+  .cartao .nome { font-weight: 600; }
+  .cartao .saldo { font-size: 1.25rem; margin: .4rem 0 .2rem; }
+  .linha { display: flex; justify-content: space-between; gap: .5rem; font-size: .9rem; }
+  .barra { background: #e3e6ea; border-radius: 6px; height: 10px; overflow: hidden; margin: .4rem 0; }
+  .barra > div { background: #2e8b57; height: 100%; }
+  ul.simples { margin: .3rem 0; padding-left: 1.2rem; }
+  button { font-size: 1rem; padding: .55rem 1.2rem; cursor: pointer; }
+  @media (max-width: 760px) { .graficos { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Personal Wealth Manager</h1>
+
+{% if not painel %}
+<div class="banner">Ainda não há registos. Faz o primeiro <a href="/checkin">check-in mensal</a>.</div>
+{% else %}
+{% set t = painel.totais %}
+<p class="sub">Dados de {{ painel.mes }} · <a href="/checkin">Check-in mensal</a></p>
+{% if painel.desatualizado %}
+<div class="banner">O último check-in é de {{ painel.mes }}; ainda não há o de {{ painel.mes_atual }}. <a href="/checkin">Fazer check-in</a></div>
+{% endif %}
+
+<div class="kpis">
+  <div class="kpi">
+    <div class="sub">Património total</div>
+    <div class="valor">{{ t.patrimonio_cent|eur }}</div>
+    <div class="sub">plataformas ativas, em {{ painel.mes }}</div>
+  </div>
+  <div class="kpi">
+    <div class="sub">Variação face ao mês anterior</div>
+    {% if t.variacao_cent is none %}
+    <div class="valor">—</div>
+    <div class="sub">primeiro mês registado</div>
+    {% else %}
+    <div class="valor {{ 'pos' if t.variacao_cent > 0 else 'neg' if t.variacao_cent < 0 }}">{{ '+' if t.variacao_cent > 0 }}{{ t.variacao_cent|eur }}</div>
+    <div class="sub">inclui aportes e ganho</div>
+    {% endif %}
+  </div>
+  <div class="kpi">
+    <div class="sub">Ganho do mês</div>
+    {% if t.ganho_cent is none %}
+    <div class="valor">—</div>
+    <div class="sub">sem mês anterior para comparar</div>
+    {% else %}
+    <div class="valor {{ 'pos' if t.ganho_cent > 0 else 'neg' if t.ganho_cent < 0 }}">{{ '+' if t.ganho_cent > 0 }}{{ t.ganho_cent|eur }}</div>
+    <div class="sub">só plataformas com ganho calculado</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="graficos">
+  <div>
+    <h2>Evolução do património</h2>
+    <div class="painel-caixa"><div class="moldura"><canvas id="graf-evolucao"></canvas></div></div>
+  </div>
+  <div>
+    <h2>Alocação (poupança, investimento, reforma)</h2>
+    <div class="painel-caixa">
+      {% if painel.alocacao %}
+      <div class="moldura"><canvas id="graf-alocacao"></canvas></div>
+      {% else %}
+      <p class="sub">Sem saldo nas plataformas que entram na alocação.</p>
+      {% endif %}
+    </div>
+    {% if painel.alocacao %}
+    <ul class="simples sub">
+      {% for f in painel.alocacao %}<li>{{ f.rotulo }}: {{ f.valor_cent|eur }} ({{ '%.1f'|format(f.percentagem)|replace('.', ',') }} %)</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+
+<h2>Plataformas</h2>
+<div class="cartoes">
+{% for c in painel.cartoes %}
+  <div class="cartao">
+    <div class="nome">{{ c.nome }}</div>
+    <div class="sub">{{ rotulos.get(c.categoria, c.categoria) }} · {{ c.titular }}</div>
+    <div class="saldo">{% if c.saldo_cent is none %}sem registo{% else %}{{ c.saldo_cent|eur }}{% endif %}</div>
+    {% if not c.registado and c.saldo_cent is not none %}<div class="sub aviso">sem registo em {{ painel.mes }}: saldo do último registo</div>{% endif %}
+    <div class="linha"><span class="sub">Ganho do mês</span>
+      <span>{% if c.ganho_cent is none %}—{% else %}<span class="{{ 'pos' if c.ganho_cent > 0 else 'neg' if c.ganho_cent < 0 }}">{{ '+' if c.ganho_cent > 0 }}{{ c.ganho_cent|eur }}</span>{% endif %}</span></div>
+    <div class="linha"><span class="sub">Aporte{% if c.plano_cent is not none %} (plano {{ c.plano_cent|eur }}){% endif %}</span>
+      <span class="{{ 'aviso' if c.em_falta }}">{% if c.aporte_cent is none %}—{% else %}{{ c.aporte_cent|eur }}{% endif %}</span></div>
+    {% for a in c.avisos %}<div class="aviso">{{ avisos.get(a, a) }}</div>{% endfor %}
+  </div>
+{% endfor %}
+</div>
+
+<h2>Planos</h2>
+<div class="painel-caixa">
+  {% for d in painel.desafios %}
+  <div><strong>Desafio das 52 semanas</strong> · {{ d.plataforma }} · {{ d.ano }}</div>
+  <div class="barra"><div style="width: {{ (d.previsto_cent * 100 / d.total_cent)|round(1) }}%"></div></div>
+  <div class="sub">Semana {{ d.semana }} de 52: previsto pelo plano até hoje {{ d.previsto_cent|eur }} de {{ d.total_cent|eur }}. É o plano, não os depósitos feitos: a aplicação só guarda o aporte de cada mês.</div>
+  {% else %}
+  <div class="sub">Sem Desafio das 52 semanas ativo.</div>
+  {% endfor %}
+  {% set em_falta = painel.cartoes|selectattr('em_falta')|list %}
+  <div style="margin-top:1rem"><strong>Aportes em falta em {{ painel.mes }}</strong></div>
+  {% if em_falta %}
+  <ul class="simples">
+    {% for c in em_falta %}
+    <li>{{ c.nome }}:
+      {% if c.por_registar %}por registar neste mês{% else %}aporte de {{ c.aporte_cent|eur }} para {{ c.plano_cent|eur }} de plano{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="sub">Nenhum.</div>
+  {% endif %}
+</div>
+{% endif %}
+
+<hr style="margin-top:2rem">
+<form method="post" action="/sair">
+  <button type="submit">Guardar e sair</button>
+  <span class="sub">Faz a cópia de segurança e fecha a aplicação.</span>
+</form>
+
+{% if painel %}
+<script src="/static/vendor/chart.umd.js"></script>
+<script>
+const dados = {{ dados|tojson }};
+// Mesmo formato do resto da página (1.234,56 €): o locale 'pt-PT' separa milhares com espaço e não agrupa 4 dígitos.
+const fmt = casas => new Intl.NumberFormat('de-DE', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+const eur = cent => fmt(2).format(cent / 100) + ' €';
+const CORES = {
+  conta_corrente: '#8a94a0', transito: '#b8c0c8', emergencia: '#e0a030', viagens: '#2fa4c9', p2p: '#7a5bd6',
+  investimento: '#2e8b57', poupanca: '#d2692e', reforma: '#2f5fb3', numerario: '#a98467', cripto: '#c0508a'
+};
+
+if (typeof Chart === 'undefined') {
+  for (const id of ['graf-evolucao', 'graf-alocacao']) {
+    const canvas = document.getElementById(id);
+    if (canvas) canvas.parentElement.innerHTML = '<p class="sub aviso">Biblioteca de gráficos em falta (app/static/vendor/chart.umd.js).</p>';
+  }
+} else {
+  new Chart(document.getElementById('graf-evolucao'), {
+    type: 'bar',
+    data: {
+      labels: dados.meses,
+      datasets: dados.evolucao.map(s => ({ label: s.rotulo, data: s.valores_cent, backgroundColor: CORES[s.categoria], stack: 'patrimonio' }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true, ticks: { callback: v => fmt(0).format(v / 100) + ' €' } }
+      },
+      plugins: { tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + eur(ctx.parsed.y) } } }
+    }
+  });
+  const alocacao = document.getElementById('graf-alocacao');
+  if (alocacao) {
+    new Chart(alocacao, {
+      type: 'doughnut',
+      data: {
+        labels: dados.alocacao.map(f => f.rotulo),
+        datasets: [{ data: dados.alocacao.map(f => f.valor_cent), backgroundColor: dados.alocacao.map(f => CORES[f.categoria]) }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { tooltip: { callbacks: { label: ctx => ctx.label + ': ' + eur(ctx.parsed) } } }
+      }
+    });
+  }
+}
+</script>
+{% endif %}
+</body>
+</html>

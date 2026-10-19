@@ -9,9 +9,10 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import backup, calc, checkin, db
+from app import backup, calc, checkin, dashboard, db
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["eur"] = calc.formatar_euros
@@ -31,23 +32,24 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Personal Wealth Manager", lifespan=lifespan)
+# Bibliotecas JS guardadas localmente (a aplicação funciona offline). check_dir=False: sem a pasta, o /static dá 404 em vez de a app não arrancar.
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static"), check_dir=False), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
-def inicio() -> str:
+def inicio(request: Request):
     conn = db.connect()
     try:
-        n = conn.execute("SELECT COUNT(*) FROM plataformas").fetchone()[0]
+        painel = dashboard.construir_painel(conn)
     finally:
         conn.close()
-    return (
-        "<!doctype html><html lang='pt'><meta charset='utf-8'>"
-        "<title>Personal Wealth Manager</title>"
-        "<h1>Personal Wealth Manager</h1>"
-        f"<p>A funcionar. Plataformas na base de dados: {n}.</p>"
-        "<p><a href='/checkin'>Check-in mensal</a></p>"
-        "<form method='post' action='/sair'><button type='submit'>Guardar e sair</button></form>"
-    )
+    contexto = {
+        "painel": painel,
+        "dados": dashboard.dados_graficos(painel) if painel else None,
+        "avisos": AVISOS,
+        "rotulos": dashboard.ROTULOS_CATEGORIA,
+    }
+    return templates.TemplateResponse(request, "dashboard.html", contexto)
 
 
 def desligar() -> None:
