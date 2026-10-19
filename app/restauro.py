@@ -27,11 +27,7 @@ COLUNAS_OPCIONAIS = {"registos_mensais": ("data_leitura",)}
 
 def ultima_copia(pasta_base: Path) -> Path:
     """A pasta de cópia mais recente (o nome AAAA-MM-DD_HHMMSS ordena como texto)."""
-    copias = (
-        sorted(p for p in pasta_base.iterdir() if p.is_dir() and backup._PADRAO_PASTA.match(p.name))
-        if pasta_base.is_dir()
-        else []
-    )
+    copias = backup.listar_copias(pasta_base)
     if not copias:
         raise FileNotFoundError(f"Não há cópias de segurança em {pasta_base}")
     return copias[-1]

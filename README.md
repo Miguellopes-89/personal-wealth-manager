@@ -5,14 +5,20 @@ num único ecrã e vês logo o resultado (ganho do mês, avisos), sem passar por
 
 Os dados ficam na tua máquina, numa base de dados SQLite. Não há contas, nem serviços externos, nem CDN.
 
-> **Estado:** em desenvolvimento. Está pronto o check-in mensal, a cópia de segurança e o restauro.
-> O painel de visão geral (evolução do património, alocação, cartões por plataforma) ainda está por fazer.
+> **Estado:** em desenvolvimento. Estão prontos o painel, o check-in mensal, a gestão de plataformas, a
+> cópia de segurança e o restauro. Falta o design final.
 
 ## O que já faz
 
+- **Painel** (`/`): património total, variação face ao mês anterior e ganho do mês; evolução do património
+  por categoria, alocação (poupança, investimento, reforma), um cartão por plataforma (aporte real vs plano)
+  e o progresso do Desafio das 52 semanas. Gráficos com Chart.js guardado localmente.
 - **Check-in mensal** (`/checkin`): uma linha por plataforma, com o saldo do mês anterior só como
   referência e o aporte pré-preenchido pelo plano. Grava tudo ou nada, e mostra o ganho do mês e os avisos
   logo a seguir. Regravar um mês atualiza-o, não duplica.
+- **Plataformas** (`/plataformas`): criar, editar, desativar e reativar (com o plano mensal ou o Desafio das
+  52 semanas). Desativar não apaga histórico: o painel conta a plataforma até ao seu último registo. Só se
+  apaga uma plataforma sem registos.
 - **Ganho do mês** = saldo − saldo do mês anterior − aporte. Plataformas como contas correntes ou
   numerário (onde salários e transferências não são lucro) ficam só com saldo, sem ganho.
 - **Avisos**: ganho negativo e mês em falta.
@@ -30,7 +36,10 @@ Os dados ficam na tua máquina, numa base de dados SQLite. Não há contas, nem 
 - **A base de dados vive fora de pastas sincronizadas** (OneDrive e semelhantes): o SQLite em pastas
   sincronizadas pode corromper-se, e o código recusa abrir um `.db` aí.
 - **O saldo anterior nunca vem pré-preenchido**, para não gravar por engano um valor antigo.
-- A lógica de dinheiro está fora da camada web (`app/checkin.py`, `app/calc.py`) e é testável sem servidor.
+- A lógica de dinheiro está fora da camada web (`app/checkin.py`, `app/calc.py`, `app/dashboard.py`) e é
+  testável sem servidor.
+- **Só aceita pedidos da própria máquina:** o servidor escuta em `127.0.0.1`, recusa outros `Host`
+  (DNS rebinding) e recusa formulários submetidos a partir de outros sites (CSRF).
 
 ## Instalação (Windows)
 
@@ -95,7 +104,9 @@ Os testes não escrevem na pasta de cópias real: cada teste usa uma pasta tempo
 ```
 app/
   main.py        rotas web (FastAPI)
+  dashboard.py   lógica do painel, sem web
   checkin.py     lógica do check-in mensal, sem web
+  plataformas.py gestão das plataformas, sem web
   calc.py        cálculo do ganho e dos avisos
   planos.py      Desafio das 52 semanas e verificação do rendimento
   db.py          ligação, esquema e migrações (SQLite)

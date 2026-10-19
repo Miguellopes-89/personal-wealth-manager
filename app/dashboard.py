@@ -4,7 +4,9 @@ Tudo o que envolve dinheiro fica aqui, em cêntimos (int), e é testável sem se
 (main.py) só chama `construir_painel` e entrega o resultado ao template.
 
 Regras:
-- Só entram plataformas ativas.
+- Os cartões, a alocação e os planos mostram só plataformas ativas.
+- Uma plataforma inativa conta no património e no ganho até ao seu último registo (decisão de 19/10/2026):
+  desativá-la não reescreve o passado, e no mês seguinte o dinheiro aparece na plataforma de destino.
 - O saldo de um mês sem registo é o do último registo anterior: uma plataforma que não foi tocada
   num check-in não desaparece do património nem faz o gráfico "cair".
 - O painel mostra o último mês com registos (`Painel.mes`); `desatualizado` diz se já passou o mês atual.
@@ -102,13 +104,6 @@ class Painel:
     desafios: tuple[ProgressoDesafio, ...]
 
 
-def _data(texto: str | None) -> date | None:
-    try:
-        return date.fromisoformat(texto) if texto else None
-    except ValueError:
-        return None
-
-
 def _meses_entre(primeiro: str, ultimo: str) -> list[str]:
     """['2026-07', ..., '2026-09'] com todos os meses do intervalo, tenham ou não registos."""
     inicio, fim = calc.mes_para_indice(primeiro), calc.mes_para_indice(ultimo)
@@ -125,13 +120,21 @@ def _saldo_em(registos: list[sqlite3.Row], mes: str) -> int | None:
     return saldo
 
 
+def _saldos_por_mes(registos: list[sqlite3.Row], meses: list[str], ativa: bool) -> list[int | None]:
+    """Saldo em cada mês. Uma inativa só conta até ao seu último registo (depois disso, None)."""
+    ultimo = registos[-1]["mes"] if registos else None
+    return [
+        _saldo_em(registos, m) if ativa or (ultimo is not None and m <= ultimo) else None for m in meses
+    ]
+
+
 def _esperado_desafio(registos: list[sqlite3.Row], mes: str, inicio: date) -> int | None:
     """Aporte previsto pelo desafio entre a leitura anterior e a deste mês; None se faltarem datas."""
     atual = next((r for r in registos if r["mes"] == mes), None)
     anterior = next((r for r in reversed(registos) if r["mes"] < mes), None)
     if atual is None or anterior is None:
         return None
-    d_atual, d_anterior = _data(atual["data_leitura"]), _data(anterior["data_leitura"])
+    d_atual, d_anterior = checkin.ler_data(atual["data_leitura"]), checkin.ler_data(anterior["data_leitura"])
     if d_atual is None or d_anterior is None or d_atual <= d_anterior:
         return None
     return planos.sugerir_desafio(d_anterior, d_atual, inicio).total_cent
@@ -140,15 +143,14 @@ def _esperado_desafio(registos: list[sqlite3.Row], mes: str, inicio: date) -> in
 def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Painel | None:
     """Painel do último mês com registos; None se ainda não há nenhum registo."""
     hoje = hoje or date.today()
-    plataformas = conn.execute(
-        """SELECT id, nome, categoria, titular, plano_mensal_cent, calcula_ganho, entra_alocacao
-           FROM plataformas WHERE ativa = 1 ORDER BY ordem, id"""
+    todas = conn.execute(
+        """SELECT id, nome, categoria, titular, plano_mensal_cent, calcula_ganho, entra_alocacao, ativa
+           FROM plataformas ORDER BY ordem, id"""
     ).fetchall()
-    registos: dict[int, list[sqlite3.Row]] = {p["id"]: [] for p in plataformas}
+    plataformas = [p for p in todas if p["ativa"]]
+    registos: dict[int, list[sqlite3.Row]] = {p["id"]: [] for p in todas}
     for r in conn.execute(
-        """SELECT r.plataforma_id, r.mes, r.saldo_cent, r.aporte_cent, r.data_leitura
-           FROM registos_mensais r JOIN plataformas p ON p.id = r.plataforma_id
-           WHERE p.ativa = 1 ORDER BY r.mes"""
+        "SELECT plataforma_id, mes, saldo_cent, aporte_cent, data_leitura FROM registos_mensais ORDER BY mes"
     ):
         registos[r["plataforma_id"]].append(r)
 
@@ -162,13 +164,13 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
     for linha in conn.execute(
         "SELECT plataforma_id, data_inicio FROM planos WHERE tipo = ? ORDER BY id", (planos.TIPO_DESAFIO_52,)
     ):
-        inicio_desafio.setdefault(linha["plataforma_id"], _data(linha["data_inicio"]))
+        inicio_desafio.setdefault(linha["plataforma_id"], checkin.ler_data(linha["data_inicio"]))
 
-    saldos = {p["id"]: [_saldo_em(registos[p["id"]], m) for m in meses] for p in plataformas}
+    saldos = {p["id"]: _saldos_por_mes(registos[p["id"]], meses, bool(p["ativa"])) for p in todas}
 
-    # Evolução: patrimónios por categoria e por mês
+    # Evolução: patrimónios por categoria e por mês (inativas incluídas até ao último registo)
     por_categoria: dict[str, list[int]] = {}
-    for p in plataformas:
+    for p in todas:
         acumulado = por_categoria.setdefault(p["categoria"], [0] * len(meses))
         for i, saldo in enumerate(saldos[p["id"]]):
             acumulado[i] += saldo or 0
@@ -181,7 +183,7 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
 
     # Ganho de cada plataforma em cada mês
     resultados: dict[tuple[int, str], calc.ResultadoMes] = {}
-    for p in plataformas:
+    for p in todas:
         lista = [calc.Registo(r["mes"], r["saldo_cent"], r["aporte_cent"]) for r in registos[p["id"]]]
         for res in calc.calcular_serie(lista, bool(p["calcula_ganho"])):
             resultados[(p["id"], res.mes)] = res
@@ -216,7 +218,11 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
             )
         )
 
-    ganhos = [c.ganho_cent for c in cartoes if c.ganho_cent is not None]
+    # O ganho do mês inclui o de uma conta fechada nesse mês (já não tem cartão, mas o dinheiro foi real)
+    ganhos = [
+        res.ganho_cent for p in todas
+        if (res := resultados.get((p["id"], mes))) is not None and res.ganho_cent is not None
+    ]
     totais = Totais(
         patrimonio_cent=total_por_mes[-1],
         variacao_cent=total_por_mes[-1] - total_por_mes[-2] if len(total_por_mes) > 1 else None,

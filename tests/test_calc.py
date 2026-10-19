@@ -123,7 +123,7 @@ def test_euros_para_cent(texto, esperado):
     assert euros_para_cent(texto) == esperado
 
 
-@pytest.mark.parametrize("mau", ["", "   ", "abc", "1.234", "NaN", "inf", "12,3,4"])
+@pytest.mark.parametrize("mau", ["", "   ", "abc", "1.234", "NaN", "inf", "12,3,4", "1.234.56", "1.23.4", "1e3", "1,23,456.00", "12,"])
 def test_euros_para_cent_rejeita(mau):
     with pytest.raises(ValueError):
         euros_para_cent(mau)

@@ -34,10 +34,10 @@
 <h1>Personal Wealth Manager</h1>
 
 {% if not painel %}
-<div class="banner">Ainda não há registos. Faz o primeiro <a href="/checkin">check-in mensal</a>.</div>
+<div class="banner">Ainda não há registos. Cria as <a href="/plataformas">plataformas</a> e faz o primeiro <a href="/checkin">check-in mensal</a>.</div>
 {% else %}
 {% set t = painel.totais %}
-<p class="sub">Dados de {{ painel.mes }} · <a href="/checkin">Check-in mensal</a></p>
+<p class="sub">Dados de {{ painel.mes }} · <a href="/checkin">Check-in mensal</a> · <a href="/plataformas">Plataformas</a></p>
 {% if painel.desatualizado %}
 <div class="banner">O último check-in é de {{ painel.mes }}; ainda não há o de {{ painel.mes_atual }}. <a href="/checkin">Fazer check-in</a></div>
 {% endif %}
@@ -46,7 +46,7 @@
   <div class="kpi">
     <div class="sub">Património total</div>
     <div class="valor">{{ t.patrimonio_cent|eur }}</div>
-    <div class="sub">plataformas ativas, em {{ painel.mes }}</div>
+    <div class="sub">em {{ painel.mes }} (inclui contas desativadas até ao último registo)</div>
   </div>
   <div class="kpi">
     <div class="sub">Variação face ao mês anterior</div>

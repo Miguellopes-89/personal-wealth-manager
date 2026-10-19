@@ -109,3 +109,55 @@ def test_protege_a_ultima_copia_de_cada_mes(conn, tmp_path):
     assert sorted(p.name for p in tmp_path.iterdir()) == [
         "2026-09-30_120000", "2026-10-06_120000", "2026-10-07_120000",
     ]
+
+
+def test_tabelas_cobrem_todo_o_esquema(conn):
+    """Uma tabela nova no esquema tem de entrar em TABELAS, senão fica fora das cópias."""
+    nomes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert set(TABELAS) == nomes
+
+
+def test_apaga_temporarias_orfas(conn, tmp_path):
+    orfa = tmp_path / "2026-10-01_090000.tmp"
+    orfa.mkdir()
+    (orfa / "plataformas.csv").write_text("meia cópia")
+    alheia = tmp_path / "notas.tmp"
+    alheia.mkdir()
+    exportar_csv(conn, tmp_path, agora=AGORA)
+    assert not orfa.exists()
+    assert alheia.exists()  # só as que têm o padrão de nome das cópias
+
+
+def test_renomear_tenta_outra_vez_se_a_pasta_estiver_presa(conn, tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from app import backup
+
+    original = Path.rename
+    falhas = {"n": 2}
+
+    def presa(self, destino):
+        if falhas["n"]:
+            falhas["n"] -= 1
+            raise PermissionError("pasta em uso")
+        return original(self, destino)
+
+    monkeypatch.setattr(Path, "rename", presa)
+    monkeypatch.setattr(backup.time, "sleep", lambda _: None)
+    destino = exportar_csv(conn, tmp_path, agora=AGORA)
+    assert destino.is_dir() and falhas["n"] == 0
+
+
+def test_renomear_desiste_e_nao_deixa_temporaria(conn, tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from app import backup
+
+    def sempre_presa(self, destino):
+        raise PermissionError("pasta em uso")
+
+    monkeypatch.setattr(Path, "rename", sempre_presa)
+    monkeypatch.setattr(backup.time, "sleep", lambda _: None)
+    with pytest.raises(PermissionError):
+        exportar_csv(conn, tmp_path, agora=AGORA)
+    assert list(tmp_path.iterdir()) == []

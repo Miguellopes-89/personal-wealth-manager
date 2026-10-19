@@ -118,3 +118,16 @@ def test_data_invalida_devolve_400_e_nao_grava(cliente):
     r = cliente.post("/checkin", data={"mes": MES, "data": "15/01/2026", f"saldo_{pid}": "100,00", f"aporte_{pid}": "0"})
     assert r.status_code == 400
     assert _datas() == []
+
+
+def test_mes_ja_gravado_abre_com_a_data_gravada(cliente):
+    pid = _plataforma()
+    cliente.post("/checkin", data={"mes": MES, "data": "2026-01-05", f"saldo_{pid}": "100,00", f"aporte_{pid}": "0"})
+    r = cliente.get(f"/checkin?mes={MES}")
+    assert 'value="2026-01-05"' in r.text
+
+
+def test_ecra_diz_onde_vai_gravar(cliente):
+    _plataforma()
+    r = cliente.get(f"/checkin?mes={MES}&data=2026-01-20")
+    assert "Vai gravar em <strong>2026-01</strong>, leitura de <strong>2026-01-20</strong>" in r.text

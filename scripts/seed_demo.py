@@ -17,7 +17,7 @@ import os
 import sqlite3
 from datetime import date
 
-from app import db, planos
+from app import checkin, db, planos
 
 # nome, categoria, titular, plano mensal (€), calcula ganho, entra na alocação
 PLATAFORMAS = [
@@ -69,10 +69,6 @@ SO_SALDO_EUR = {
 }
 
 
-def _mes(d: date) -> str:
-    return f"{d.year:04d}-{d.month:02d}"
-
-
 def carregar(conn: sqlite3.Connection) -> None:
     """Insere plataformas, o plano do Desafio e três meses de registos fictícios (tudo numa transação)."""
     with conn:
@@ -105,14 +101,14 @@ def carregar(conn: sqlite3.Connection) -> None:
                     conn.execute(
                         """INSERT INTO registos_mensais (plataforma_id, mes, saldo_cent, aporte_cent, data_leitura)
                            VALUES (?, ?, ?, ?, ?)""",
-                        (p["id"], _mes(leitura), saldo, aporte, leitura.isoformat()),
+                        (p["id"], checkin.mes_de(leitura), saldo, aporte, leitura.isoformat()),
                     )
             else:
                 for leitura, saldo_eur in zip(LEITURAS, SO_SALDO_EUR[p["nome"]]):
                     conn.execute(
                         """INSERT INTO registos_mensais (plataforma_id, mes, saldo_cent, aporte_cent, data_leitura)
                            VALUES (?, ?, ?, 0, NULL)""",
-                        (p["id"], _mes(leitura), saldo_eur * 100),
+                        (p["id"], checkin.mes_de(leitura), saldo_eur * 100),
                     )
 
 

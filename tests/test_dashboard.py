@@ -109,14 +109,45 @@ def test_meses_atravessam_o_ano(conn):
     assert dashboard.construir_painel(conn, HOJE).meses == ("2025-12", "2026-01", "2026-02")
 
 
-def test_plataformas_inativas_ficam_de_fora(conn):
+def test_inativa_sem_registo_no_mes_fica_de_fora_do_mes_mas_nao_do_passado(conn):
+    """Opção A (19/10/2026): desativar não reescreve o passado; depois do último registo deixa de contar."""
     a = _plat(conn, "A")
     z = _plat(conn, "Z", ativa=0)
+    _reg(conn, a, "2026-09", 100000)
+    _reg(conn, z, "2026-09", 50000)
     _reg(conn, a, "2026-10", 100000)
-    _reg(conn, z, "2026-10", 999999)
     painel = dashboard.construir_painel(conn, HOJE)
     assert painel.totais.patrimonio_cent == 100000
     assert [c.nome for c in painel.cartoes] == ["A"]
+    evolucao = {s.categoria: s.valores_cent for s in painel.evolucao}
+    assert evolucao["investimento"] == (150000, 100000)
+
+
+def test_conta_fechada_no_mes_mantem_a_variacao_e_o_ganho_certos(conn):
+    """Fechar a Z (levantamento de 500 € para a A) não é perda: variação 0 e ganho só o real."""
+    a = _plat(conn, "A")
+    z = _plat(conn, "Z", ativa=0)
+    _reg(conn, a, "2026-09", 100000)
+    _reg(conn, z, "2026-09", 50000)
+    _reg(conn, a, "2026-10", 150300, aporte=50000)  # recebeu os 500 € e ganhou 3 €
+    _reg(conn, z, "2026-10", 0, aporte=-50000)  # fecho registado à mão no check-in: saldo 0 e levantamento
+    painel = dashboard.construir_painel(conn, HOJE)
+    assert painel.totais.patrimonio_cent == 150300
+    assert painel.totais.variacao_cent == 300
+    assert painel.totais.ganho_cent == 300
+    assert [c.nome for c in painel.cartoes] == ["A"]
+
+
+def test_inativa_fora_da_alocacao_e_dos_planos(conn):
+    a = _plat(conn, "A")
+    z = _plat(conn, "Z", ativa=0)
+    _desafio(conn, z)
+    _reg(conn, a, "2026-10", 100000)
+    _reg(conn, z, "2026-10", 999999)
+    painel = dashboard.construir_painel(conn, HOJE)
+    assert painel.totais.patrimonio_cent == 100000 + 999999  # registo no mês: conta no património
+    assert sum(f.valor_cent for f in painel.alocacao) == 100000
+    assert painel.desafios == ()
 
 
 def test_evolucao_agrupa_por_categoria(conn):

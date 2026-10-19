@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Check-in mensal · Personal Wealth Manager</title>
 <style>
-  /* Estilo provisório: o design Monarch fica para a sessão 5. */
+  /* Estilo provisório: o design Monarch fica para a sessão 7. */
   body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1b1f24; }
   h1 { margin-bottom: .25rem; }
   table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
@@ -22,11 +22,13 @@
   .banner.ok { background: #e8f6ec; color: #1e6b36; }
   .aviso { color: #9a6700; font-size: .85rem; }
   button { font-size: 1rem; padding: .55rem 1.2rem; cursor: pointer; }
+  .destino { margin: .5rem 0; }
+  button:disabled { cursor: not-allowed; opacity: .5; }
   form.mes { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 </style>
 </head>
 <body>
-<p><a href="/">&larr; Início</a></p>
+<p><a href="/">&larr; Início</a> · <a href="/plataformas">Plataformas</a></p>
 <h1>Check-in mensal</h1>
 
 <form class="mes" method="get" action="/checkin">
@@ -107,8 +109,23 @@
     </tbody>
   </table>
   <p class="sub">Vírgula para os cêntimos (12,50). Saldo em branco = plataforma não alterada. Levantamentos: aporte negativo (-100,00).</p>
-  <button type="submit">Gravar check-in</button>
+  <p class="destino">Vai gravar em <strong>{{ mes }}</strong>, leitura de <strong>{{ data_leitura }}</strong>.</p>
+  <p id="aviso-mudanca" class="banner erro" hidden>Mudaste o mês ou a data lá em cima: carrega em <strong>Abrir</strong> antes de gravar (o aporte sugerido depende deles).</p>
+  <button type="submit" id="gravar">Gravar check-in</button>
 </form>
+<script>
+// Os campos do topo só contam depois de "Abrir": até lá, não deixa gravar com o mês ou a data antigos.
+(() => {
+  const topo = { mes: document.getElementById('mes'), data: document.getElementById('data') };
+  const gravados = { mes: {{ mes|tojson }}, data: {{ data_leitura|tojson }} };
+  const botao = document.getElementById('gravar'), aviso = document.getElementById('aviso-mudanca');
+  const verificar = () => {
+    const mudou = topo.mes.value !== gravados.mes || topo.data.value !== gravados.data;
+    botao.disabled = mudou; aviso.hidden = !mudou;
+  };
+  topo.mes.addEventListener('input', verificar); topo.data.addEventListener('input', verificar);
+})();
+</script>
 <hr>
 <form method="post" action="/sair">
   <button type="submit">Guardar e sair</button>

@@ -241,3 +241,55 @@ def test_sem_datas_nao_ha_aviso_de_rendimento(conn):
 def test_plataforma_sem_desafio_nao_tem_aviso_de_rendimento(conn):
     r = _outubro_e_novembro(conn, "85,00", com_plano=False)
     assert r.gravados[0].avisos_plano == ()
+
+
+def test_regravar_linha_igual_mantem_a_data(conn):
+    """Corrigir outra plataforma dias depois não muda a data da leitura da Bondora (que não mudou)."""
+    pid = _bondora(conn)
+    rev = conn.execute(
+        "INSERT INTO plataformas (nome, categoria, titular, plano_mensal_cent) VALUES ('Rev', 'viagens', 'X', 2000)"
+    ).lastrowid
+    conn.commit()
+    _registo(conn, pid, "2026-10", 500_000, data="2026-10-13")
+    _registo(conn, rev, "2026-10", 10_000, data="2026-10-13")
+    checkin.gravar_checkin(
+        conn, "2026-11", [Entrada(pid, "5150,00", "129,00"), Entrada(rev, "120,00", "20,00")],
+        date(2026, 11, 1), data_leitura=date(2026, 11, 1),
+    )
+    # 10/11: o ecrã volta a mandar a Bondora igual e a Revolut corrigida
+    checkin.gravar_checkin(
+        conn, "2026-11", [Entrada(pid, "5150,00", "129,00"), Entrada(rev, "121,00", "20,00")],
+        date(2026, 11, 10), data_leitura=date(2026, 11, 10),
+    )
+    assert _data(conn, pid, "2026-11") == "2026-11-01"
+    assert _data(conn, rev, "2026-11") == "2026-11-10"
+    dezembro = checkin.linhas_checkin(conn, "2026-12", date(2026, 12, 1))[0]
+    assert [s.numero for s in dezembro.sugestao.semanas] == [45, 46, 47, 48]  # o domingo 8/11 não se perde
+
+
+def test_regravar_linha_igual_sem_data_recebe_a_nova(conn):
+    pid = _bondora(conn, com_plano=False)
+    _registo(conn, pid, "2026-10", 10_000)
+    checkin.gravar_checkin(conn, "2026-10", [Entrada(pid, "100,00")], date(2026, 10, 20), date(2026, 10, 13))
+    assert _data(conn, pid, "2026-10") == "2026-10-13"
+
+
+def test_data_gravada_do_mes(conn):
+    pid = _bondora(conn, com_plano=False)
+    assert checkin.data_gravada(conn, "2026-10") is None
+    _registo(conn, pid, "2026-10", 10_000, data="2026-10-13")
+    assert checkin.data_gravada(conn, "2026-10") == date(2026, 10, 13)
+
+
+def test_verificacao_do_plano_que_rebenta_nao_impede_a_gravacao(conn, monkeypatch):
+    pid = _bondora(conn)
+    _registo(conn, pid, "2026-10", 500_000, data="2026-10-13")
+
+    def rebenta(*_):
+        raise RuntimeError("falha de teste")
+
+    monkeypatch.setattr(checkin, "_avisos_do_plano", rebenta)
+    r = checkin.gravar_checkin(conn, "2026-11", [Entrada(pid, "5150,00", "129,00")], date(2026, 11, 1), date(2026, 11, 1))
+    assert r.ok
+    assert "Não foi possível verificar o rendimento" in r.gravados[0].avisos_plano[0]
+    assert _data(conn, pid, "2026-11") == "2026-11-01"

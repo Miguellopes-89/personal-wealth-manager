@@ -108,7 +108,17 @@ def validar_data_leitura(data: date, mes: str, hoje: date | None = None) -> None
         raise ValueError(f"Data da leitura no futuro: {data:%d/%m/%Y}")
 
 
-def _ler_data(texto: str | None) -> date | None:
+def data_gravada(conn: sqlite3.Connection, mes: str) -> date | None:
+    """A data da leitura já gravada nesse mês (a mais recente, se houver várias); None se não há nenhuma."""
+    linha = conn.execute(
+        """SELECT MAX(r.data_leitura) AS d FROM registos_mensais r
+           JOIN plataformas p ON p.id = r.plataforma_id WHERE r.mes = ? AND p.ativa = 1""",
+        (mes,),
+    ).fetchone()
+    return ler_data(linha["d"])
+
+
+def ler_data(texto: str | None) -> date | None:
     try:
         return date.fromisoformat(texto) if texto else None
     except ValueError:
@@ -129,7 +139,7 @@ def _sugerir_plano(
     ).fetchone()
     if plano is None or atual is None or not tem_anterior:
         return None, None
-    inicio = _ler_data(plano["data_inicio"])
+    inicio = ler_data(plano["data_inicio"])
     if inicio is None:
         return None, "O plano tem uma data de início inválida: aporte do desafio não sugerido."
     if anterior is None:
@@ -162,7 +172,7 @@ def linhas_checkin(conn: sqlite3.Connection, mes: str, data_leitura: date | None
             "SELECT saldo_cent, aporte_cent FROM registos_mensais WHERE plataforma_id = ? AND mes = ?",
             (p["id"], mes),
         ).fetchone()
-        data_anterior = _ler_data(anterior["data_leitura"]) if anterior else None
+        data_anterior = ler_data(anterior["data_leitura"]) if anterior else None
         sugestao, nota = _sugerir_plano(conn, p["id"], anterior is not None, data_anterior, data_leitura)
         if atual:
             aporte = atual["aporte_cent"]
@@ -211,8 +221,8 @@ def _avisos_do_plano(
            WHERE plataforma_id = ? AND mes < ? ORDER BY mes DESC LIMIT 1""",
         (plataforma_id, mes),
     ).fetchone()
-    data_atual = _ler_data(atual["data_leitura"]) if atual else None
-    data_anterior = _ler_data(anterior["data_leitura"]) if anterior else None
+    data_atual = ler_data(atual["data_leitura"]) if atual else None
+    data_anterior = ler_data(anterior["data_leitura"]) if anterior else None
     if data_atual is None or data_anterior is None:
         return ()
     aviso = planos.aviso_rendimento(ganho_cent, anterior["saldo_cent"], (data_atual - data_anterior).days)
@@ -277,7 +287,13 @@ def gravar_checkin(
                ON CONFLICT(plataforma_id, mes) DO UPDATE SET
                    saldo_cent = excluded.saldo_cent,
                    aporte_cent = excluded.aporte_cent,
-                   data_leitura = COALESCE(excluded.data_leitura, data_leitura)""",
+                   -- Uma linha que volta igual (o ecrã pré-preenche o que já está gravado) mantém a sua data:
+                   -- reescrevê-la com a de hoje desloca a sugestão da Bondora do mês seguinte.
+                   data_leitura = CASE
+                       WHEN saldo_cent = excluded.saldo_cent AND aporte_cent = excluded.aporte_cent
+                           THEN COALESCE(data_leitura, excluded.data_leitura)
+                       ELSE COALESCE(excluded.data_leitura, data_leitura)
+                   END""",
             [(pid, mes, saldo, aporte, data_iso) for pid, saldo, aporte in a_gravar],
         )
 
@@ -292,7 +308,10 @@ def gravar_checkin(
         ]
         serie = calc.calcular_serie(regs, bool(ativas[pid]["calcula_ganho"]))
         resultado = next(r for r in serie if r.mes == mes)
-        avisos_plano = _avisos_do_plano(conn, pid, mes, resultado.ganho_cent)
+        try:  # os dados já estão gravados: uma verificação que rebente não pode dar erro 500
+            avisos_plano = _avisos_do_plano(conn, pid, mes, resultado.ganho_cent)
+        except Exception as exc:
+            avisos_plano = (f"Não foi possível verificar o rendimento ({type(exc).__name__}: {exc}).",)
         gravados.append(Gravado(pid, ativas[pid]["nome"], resultado, avisos_plano))
 
     return Resultado(gravados=tuple(gravados), ignorados=tuple(ignorados))

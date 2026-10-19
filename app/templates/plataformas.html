@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plataformas · Personal Wealth Manager</title>
+<style>
+  /* Estilo provisório: o design Monarch fica para a sessão 7. */
+  body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; color: #1b1f24; }
+  h1 { margin-bottom: .25rem; }
+  h2 { font-size: 1.05rem; margin: 2rem 0 .6rem; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid #e3e6ea; vertical-align: top; }
+  th { font-size: .8rem; text-transform: uppercase; color: #5b6570; }
+  td.num, th.num { text-align: right; }
+  tr.inativa td { color: #8a94a0; }
+  .sub { color: #5b6570; font-size: .85rem; }
+  .msg-erro { color: #c0392b; font-size: .85rem; }
+  .banner { padding: .6rem .9rem; border-radius: 6px; margin: 1rem 0; }
+  .banner.erro { background: #fdecea; color: #922b21; }
+  .banner.ok { background: #e8f6ec; color: #1e6b36; }
+  .grelha { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem 1rem; }
+  label.campo { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; }
+  label.caixa { display: flex; gap: .4rem; align-items: center; font-size: .9rem; }
+  input[type=text], input[type=date], select { padding: .35rem; font-size: 1rem; }
+  input.erro, select.erro { border: 2px solid #c0392b; }
+  .caixa-acao { border: 1px solid #e3e6ea; border-radius: 10px; padding: .9rem 1rem; margin-top: 1rem; }
+  button { font-size: 1rem; padding: .55rem 1.2rem; cursor: pointer; }
+  nav a { margin-right: 1rem; }
+</style>
+</head>
+<body>
+<nav><a href="/">&larr; Início</a><a href="/checkin">Check-in mensal</a></nav>
+<h1>Plataformas</h1>
+
+{% if erro_geral %}<div class="banner erro">{{ erro_geral }}</div>{% endif %}
+{% if aviso_backup %}<div class="banner erro">{{ aviso_backup }}</div>{% endif %}
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+<table>
+  <thead><tr><th>Plataforma</th><th>Categoria</th><th class="num">Plano mensal</th><th>Ganho · Alocação</th><th>Registos</th><th></th></tr></thead>
+  <tbody>
+  {% for p in lista %}
+    <tr class="{{ '' if p.ativa else 'inativa' }}">
+      <td>{{ p.nome }}<div class="sub">{{ p.titular }}{% if p.finalidade %} · {{ p.finalidade }}{% endif %}{% if not p.ativa %} · inativa{% endif %}</div></td>
+      <td>{{ dict(categorias).get(p.categoria, p.categoria) }}</td>
+      <td class="num">{% if p.desafio_inicio %}Desafio 52 sem.{% else %}{{ p.plano_mensal_cent|eur }}{% endif %}</td>
+      <td>{{ 'sim' if p.calcula_ganho else 'não' }} · {{ 'sim' if p.entra_alocacao else 'não' }}</td>
+      <td>{{ p.n_registos }}{% if p.ultimo_mes %} <span class="sub">(último {{ p.ultimo_mes }})</span>{% endif %}</td>
+      <td><a href="/plataformas/{{ p.id }}">Editar</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="sub">Ainda não há plataformas.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>{% if editar %}Editar {{ editar.nome }}{% else %}Nova plataforma{% endif %}</h2>
+<form method="post" action="{% if editar %}/plataformas/{{ editar.id }}{% else %}/plataformas{% endif %}">
+  <div class="grelha">
+    <label class="campo">Nome
+      <input type="text" name="nome" value="{{ form.nome or '' }}" required{% if erros.nome %} class="erro"{% endif %}>
+      {% if erros.nome %}<span class="msg-erro">{{ erros.nome }}</span>{% endif %}
+    </label>
+    <label class="campo">Categoria
+      <select name="categoria"{% if erros.categoria %} class="erro"{% endif %}>
+        <option value="">—</option>
+        {% for valor, rotulo in categorias %}<option value="{{ valor }}"{% if form.categoria == valor %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+      </select>
+      {% if erros.categoria %}<span class="msg-erro">{{ erros.categoria }}</span>{% endif %}
+    </label>
+    <label class="campo">Titular
+      <input type="text" name="titular" value="{{ form.titular or '' }}" required{% if erros.titular %} class="erro"{% endif %}>
+      {% if erros.titular %}<span class="msg-erro">{{ erros.titular }}</span>{% endif %}
+    </label>
+    <label class="campo">Finalidade <span class="sub">(opcional)</span>
+      <input type="text" name="finalidade" value="{{ form.finalidade or '' }}">
+    </label>
+    <label class="campo">Plano mensal (€)
+      <input type="text" inputmode="decimal" name="plano_mensal" value="{{ form.plano_mensal or '' }}"{% if erros.plano_mensal %} class="erro"{% endif %}>
+      {% if erros.plano_mensal %}<span class="msg-erro">{{ erros.plano_mensal }}</span>{% endif %}
+    </label>
+    <label class="campo">Ordem no ecrã
+      <input type="text" inputmode="numeric" name="ordem" value="{{ form.ordem or '' }}"{% if erros.ordem %} class="erro"{% endif %}>
+      {% if erros.ordem %}<span class="msg-erro">{{ erros.ordem }}</span>{% endif %}
+    </label>
+  </div>
+  <p>
+    <label class="caixa"><input type="checkbox" name="calcula_ganho" value="1"{% if form.calcula_ganho %} checked{% endif %}> Calcula ganho <span class="sub">(desmarca em contas correntes e numerário: salários e transferências não são lucro)</span></label>
+    <label class="caixa"><input type="checkbox" name="entra_alocacao" value="1"{% if form.entra_alocacao %} checked{% endif %}> Entra na alocação <span class="sub">(poupança, investimento, reforma)</span></label>
+    <label class="caixa"><input type="checkbox" name="desafio" value="1"{% if form.desafio %} checked{% endif %}> Desafio das 52 semanas, desde
+      <input type="date" name="desafio_inicio" value="{{ form.desafio_inicio or '' }}"{% if erros.desafio_inicio %} class="erro"{% endif %}></label>
+    {% if erros.desafio_inicio %}<span class="msg-erro">{{ erros.desafio_inicio }}</span>{% endif %}
+  </p>
+  {% if editar and editar.n_registos %}<p class="sub">Mudar a categoria ou o "calcula ganho" muda também os meses passados no painel.</p>{% endif %}
+  <button type="submit">{% if editar %}Guardar alterações{% else %}Criar plataforma{% endif %}</button>
+  {% if editar %}<a href="/plataformas" style="margin-left:1rem">Cancelar</a>{% endif %}
+</form>
+
+{% if editar %}
+<div class="caixa-acao">
+  {% if editar.ativa %}
+  <form method="post" action="/plataformas/{{ editar.id }}/desativar">
+    <strong>Desativar</strong>
+    <p class="sub">Deixa de aparecer no check-in e nos cartões. O histórico fica: o painel conta-a até ao último registo{% if ultimo %} ({{ ultimo.mes }}, {{ ultimo.saldo_cent|eur }}){% endif %} e deixa de a contar no mês seguinte.</p>
+    <p class="sub">Se fechaste a conta e o dinheiro foi para outra plataforma, regista-o lá como aporte no próximo check-in: assim a variação e o ganho ficam certos.</p>
+    <button type="submit">Desativar</button>
+  </form>
+  {% else %}
+  <form method="post" action="/plataformas/{{ editar.id }}/reativar">
+    <strong>Reativar</strong> <span class="sub">Volta a aparecer no check-in.</span>
+    <button type="submit">Reativar</button>
+  </form>
+  {% endif %}
+  {% if not editar.n_registos %}
+  <form method="post" action="/plataformas/{{ editar.id }}/apagar" style="margin-top:1rem">
+    <strong>Apagar</strong> <span class="sub">Só é possível porque ainda não tem registos.</span>
+    <button type="submit">Apagar</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+</body>
+</html>

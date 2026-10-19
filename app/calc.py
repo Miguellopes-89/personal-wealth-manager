@@ -5,6 +5,7 @@ Todos os valores monetários circulam em cêntimos (int), nunca em float:
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
@@ -75,14 +76,21 @@ def calcular_serie(registos: list[Registo], calcula_ganho: bool = True) -> list[
     return resultados
 
 
+_NUMERO = re.compile(r"[+-]?\d+(\.\d+)?")
+# Parte inteira com separador de milhares: grupos de 3 depois do primeiro ('1.234.567', não '1.23.4')
+_MILHARES = {sep: re.compile(rf"[+-]?\d{{1,3}}(\{sep}\d{{3}})+") for sep in ".,"}
+
+
 def euros_para_cent(texto: str) -> int:
     """Converte texto digitado ('12,50', '1.234,56', '12.5') em cêntimos.
 
-    Rejeita o caso ambíguo '1.234' (mil duzentos e trinta e quatro, ou 1,234?).
+    Rejeita o caso ambíguo '1.234' (mil duzentos e trinta e quatro, ou 1,234?) e separadores de milhares
+    mal colocados ('1.234.56' não vira 123.456 €).
     """
     t = texto.strip().replace("€", "").replace(" ", "").replace("\u00a0", "")
     if not t:
         raise ValueError("Valor vazio")
+    _validar_milhares(t, texto)
     if "," in t and "." in t:
         if t.rfind(",") > t.rfind("."):
             t = t.replace(".", "").replace(",", ".")  # 1.234,56
@@ -95,6 +103,8 @@ def euros_para_cent(texto: str) -> int:
             t = t.replace(".", "")  # 1.234.567
         elif len(t.split(".")[1]) == 3:
             raise ValueError(f"Valor ambíguo: {texto!r} (use vírgula para os cêntimos)")
+    if not _NUMERO.fullmatch(t):  # rejeita '1e3' e restos que o Decimal aceitaria
+        raise ValueError(f"Valor inválido: {texto!r}")
     try:
         valor = Decimal(t)
     except InvalidOperation:
@@ -102,6 +112,20 @@ def euros_para_cent(texto: str) -> int:
     if not valor.is_finite():
         raise ValueError(f"Valor inválido: {texto!r}")
     return int((valor * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def _validar_milhares(t: str, original: str) -> None:
+    """Se há um separador de milhares, a parte inteira tem de estar em grupos de 3."""
+    if "," in t and "." in t:
+        decimal = "," if t.rfind(",") > t.rfind(".") else "."
+        milhares = "." if decimal == "," else ","
+        inteiro = t[: t.rfind(decimal)]
+    elif t.count(".") > 1:
+        milhares, inteiro = ".", t
+    else:
+        return
+    if not _MILHARES[milhares].fullmatch(inteiro):
+        raise ValueError(f"Separador de milhares mal colocado: {original!r}")
 
 
 def formatar_euros(cent: int) -> str:

@@ -1,18 +1,19 @@
-"""Aplicação web do PWM: página de estado e check-in mensal."""
+"""Aplicação web do PWM: painel, check-in mensal e gestão de plataformas."""
 from __future__ import annotations
 
 import signal
 import time
+from urllib.parse import urlsplit
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import backup, calc, checkin, dashboard, db
+from app import backup, calc, checkin, dashboard, db, plataformas
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["eur"] = calc.formatar_euros
@@ -32,6 +33,27 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Personal Wealth Manager", lifespan=lifespan)
+
+# Só se responde a pedidos para a própria máquina: um domínio externo que passe a apontar para 127.0.0.1
+# (DNS rebinding) chega com outro Host e é recusado.
+HOSTS_PERMITIDOS = {"127.0.0.1", "localhost"}
+
+
+@app.middleware("http")
+async def so_pedidos_locais(request: Request, call_next):
+    """Recusa Hosts alheios e POSTs vindos de outra origem (CSRF: outro site a submeter formulários aqui).
+
+    Um POST sem Origin nem Referer (curl, testes) passa: os browsers mandam sempre Origin num POST.
+    """
+    host = request.headers.get("host", "")
+    if (urlsplit(f"//{host}").hostname or "") not in HOSTS_PERMITIDOS:
+        return PlainTextResponse("Host não permitido", status_code=400)
+    if request.method == "POST":
+        origem = request.headers.get("origin") or request.headers.get("referer")
+        if origem is not None and urlsplit(origem).netloc != host:
+            return PlainTextResponse("Pedido de outra origem recusado", status_code=403)
+    return await call_next(request)
+
 # Bibliotecas JS guardadas localmente (a aplicação funciona offline). check_dir=False: sem a pasta, o /static dá 404 em vez de a app não arrancar.
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static"), check_dir=False), name="static")
 
@@ -109,11 +131,16 @@ def _data_do_formulario(texto: str | None, mes: str) -> date:
     return data
 
 
-def _data_para_ver(texto: str | None, mes: str) -> date:
-    """No ecrã, uma data que não serve para o mês (ex.: depois de mudar de mês) volta à de defeito.
+def _data_para_ver(conn, texto: str | None, mes: str) -> date:
+    """Data a mostrar no ecrã. Sem data escolhida: a já gravada nesse mês, ou a de defeito.
 
-    Na gravação a validação é estrita; aqui o campo mostra sempre a data que vai ser usada.
+    Uma data que não serve para o mês (ex.: depois de mudar de mês) volta à de defeito. Na gravação a
+    validação é estrita; aqui o campo mostra sempre a data que vai ser usada.
     """
+    if not (texto or "").strip():
+        gravada = checkin.data_gravada(conn, mes)
+        if gravada is not None:
+            return gravada
     try:
         return _data_do_formulario(texto, mes)
     except ValueError:
@@ -129,9 +156,9 @@ def checkin_ver(request: Request, mes: str | None = None, data: str | None = Non
         checkin.validar_mes(mes)
     except ValueError as exc:
         erro_geral, mes = str(exc), atual
-    data_leitura = _data_para_ver(data, mes)
     conn = db.connect()
     try:
+        data_leitura = _data_para_ver(conn, data, mes)
         contexto = _contexto(conn, mes, data_leitura, erro_geral=erro_geral)
     finally:
         conn.close()
@@ -182,3 +209,138 @@ async def checkin_gravar(request: Request):
     finally:
         conn.close()
     return templates.TemplateResponse(request, "checkin.html", contexto)
+
+
+# --- Plataformas -------------------------------------------------------------
+
+def _backup_depois_de_mudar(conn) -> str | None:
+    """Cópia de segurança depois de uma alteração; se falhar, devolve o aviso (a alteração fica)."""
+    try:
+        backup.exportar_csv(conn, backup.pasta_backup_por_defeito())
+    except Exception as exc:
+        return f"Gravado, mas a cópia de segurança falhou ({type(exc).__name__}: {exc}). Carrega em Guardar e sair para tentar outra vez."
+    return None
+
+
+def _ecra_plataformas(request: Request, conn, *, editar=None, form=None, erros=None, msg=None, erro_geral=None,
+                      aviso_backup=None, status_code=200):
+    """Lista de plataformas + formulário (novo ou edição de `editar`). `form`: textos já escritos."""
+    if form is None:
+        if editar is not None:
+            form = {
+                "nome": editar["nome"], "categoria": editar["categoria"], "titular": editar["titular"],
+                "finalidade": editar["finalidade"] or "", "plano_mensal": checkin.cent_para_texto(editar["plano_mensal_cent"]),
+                "calcula_ganho": "1" if editar["calcula_ganho"] else "", "entra_alocacao": "1" if editar["entra_alocacao"] else "",
+                "ordem": str(editar["ordem"]), "desafio": "1" if editar["desafio_inicio"] else "",
+                "desafio_inicio": editar["desafio_inicio"] or "",
+            }
+        else:
+            form = {"calcula_ganho": "1", "entra_alocacao": "1", "ordem": str(plataformas.proxima_ordem(conn)),
+                    "plano_mensal": "0,00", "desafio_inicio": f"{date.today().year}-01-01"}
+    contexto = {
+        "lista": plataformas.listar(conn), "editar": editar, "form": form, "erros": erros or {},
+        "msg": msg, "erro_geral": erro_geral, "aviso_backup": aviso_backup,
+        "categorias": [(c, dashboard.ROTULOS_CATEGORIA[c]) for c in db.CATEGORIAS],
+        "ultimo": plataformas.ultimo_saldo(conn, editar["id"]) if editar is not None else None,
+    }
+    return templates.TemplateResponse(request, "plataformas.html", contexto, status_code=status_code)
+
+
+def _form_texto(form) -> dict[str, str]:
+    return {k: str(v) for k, v in form.items()}
+
+
+@app.get("/plataformas", response_class=HTMLResponse)
+def plataformas_ver(request: Request):
+    conn = db.connect()
+    try:
+        return _ecra_plataformas(request, conn)
+    finally:
+        conn.close()
+
+
+@app.post("/plataformas", response_class=HTMLResponse)
+async def plataformas_criar(request: Request):
+    form = _form_texto(await request.form())
+    conn = db.connect()
+    try:
+        v = plataformas.validar(form)
+        if not v.ok:
+            return _ecra_plataformas(request, conn, form=form, erros=v.erros,
+                                     erro_geral="Nada foi gravado: corrige os campos assinalados.", status_code=422)
+        try:
+            plataformas.criar(conn, v.dados)
+        except ValueError as exc:
+            return _ecra_plataformas(request, conn, form=form, erros={"nome": str(exc)},
+                                     erro_geral="Nada foi gravado.", status_code=422)
+        aviso = _backup_depois_de_mudar(conn)
+        return _ecra_plataformas(request, conn, msg=f"Plataforma {v.dados.nome!r} criada.", aviso_backup=aviso)
+    finally:
+        conn.close()
+
+
+def _obter_ou_404(request: Request, conn, plataforma_id: int):
+    p = plataformas.obter(conn, plataforma_id)
+    if p is None:
+        return None, _ecra_plataformas(request, conn, erro_geral="Plataforma inexistente.", status_code=404)
+    return p, None
+
+
+@app.get("/plataformas/{plataforma_id}", response_class=HTMLResponse)
+def plataforma_ver(request: Request, plataforma_id: int):
+    conn = db.connect()
+    try:
+        p, erro = _obter_ou_404(request, conn, plataforma_id)
+        return erro or _ecra_plataformas(request, conn, editar=p)
+    finally:
+        conn.close()
+
+
+@app.post("/plataformas/{plataforma_id}", response_class=HTMLResponse)
+async def plataforma_atualizar(request: Request, plataforma_id: int):
+    form = _form_texto(await request.form())
+    conn = db.connect()
+    try:
+        p, erro = _obter_ou_404(request, conn, plataforma_id)
+        if erro:
+            return erro
+        v = plataformas.validar(form)
+        if not v.ok:
+            return _ecra_plataformas(request, conn, editar=p, form=form, erros=v.erros,
+                                     erro_geral="Nada foi gravado: corrige os campos assinalados.", status_code=422)
+        try:
+            plataformas.atualizar(conn, plataforma_id, v.dados)
+        except ValueError as exc:
+            return _ecra_plataformas(request, conn, editar=p, form=form, erros={"nome": str(exc)},
+                                     erro_geral="Nada foi gravado.", status_code=422)
+        aviso = _backup_depois_de_mudar(conn)
+        return _ecra_plataformas(request, conn, msg=f"Plataforma {v.dados.nome!r} atualizada.", aviso_backup=aviso)
+    finally:
+        conn.close()
+
+
+@app.post("/plataformas/{plataforma_id}/{acao}", response_class=HTMLResponse)
+def plataforma_acao(request: Request, plataforma_id: int, acao: str):
+    conn = db.connect()
+    try:
+        p, erro = _obter_ou_404(request, conn, plataforma_id)
+        if erro:
+            return erro
+        try:
+            if acao == "desativar":
+                plataformas.desativar(conn, plataforma_id)
+                msg = f"{p['nome']} desativada: o histórico fica no painel até ao último registo."
+            elif acao == "reativar":
+                plataformas.reativar(conn, plataforma_id)
+                msg = f"{p['nome']} reativada: volta a aparecer no check-in."
+            elif acao == "apagar":
+                plataformas.apagar(conn, plataforma_id)
+                msg = f"{p['nome']} apagada."
+            else:
+                return _ecra_plataformas(request, conn, erro_geral="Ação desconhecida.", status_code=404)
+        except (ValueError, LookupError) as exc:
+            return _ecra_plataformas(request, conn, editar=p, erro_geral=str(exc), status_code=422)
+        aviso = _backup_depois_de_mudar(conn)
+        return _ecra_plataformas(request, conn, msg=msg, aviso_backup=aviso)
+    finally:
+        conn.close()
