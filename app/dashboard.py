@@ -5,8 +5,8 @@ Tudo o que envolve dinheiro fica aqui, em cêntimos (int), e é testável sem se
 
 Regras:
 - Os cartões, a alocação e os planos mostram só plataformas ativas.
-- Uma plataforma inativa conta no património e no ganho até ao seu último registo (decisão de 19/10/2026):
-  desativá-la não reescreve o passado, e no mês seguinte o dinheiro aparece na plataforma de destino.
+- Uma plataforma inativa conta no património e no ganho até ao seu último registo, que tem saldo 0
+  (só se desativa uma conta fechada, ver `plataformas.py`): desativá-la não reescreve o passado.
 - O saldo de um mês sem registo é o do último registo anterior: uma plataforma que não foi tocada
   num check-in não desaparece do património nem faz o gráfico "cair".
 - O painel mostra o último mês com registos (`Painel.mes`); `desatualizado` diz se já passou o mês atual.

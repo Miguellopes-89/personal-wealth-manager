@@ -102,9 +102,11 @@
   {% if editar.ativa %}
   <form method="post" action="/plataformas/{{ editar.id }}/desativar">
     <strong>Desativar</strong>
-    <p class="sub">Deixa de aparecer no check-in e nos cartões. O histórico fica: o painel conta-a até ao último registo{% if ultimo %} ({{ ultimo.mes }}, {{ ultimo.saldo_cent|eur }}){% endif %} e deixa de a contar no mês seguinte.</p>
-    <p class="sub">Se fechaste a conta e o dinheiro foi para outra plataforma, regista-o lá como aporte no próximo check-in: assim a variação e o ganho ficam certos.</p>
-    <button type="submit">Desativar</button>
+    <p class="sub">Deixa de aparecer no check-in e nos cartões. O histórico fica no painel.</p>
+    {% if ultimo and ultimo.saldo_cent != 0 %}
+    <p class="sub">Só se desativa uma conta fechada: o último registo ({{ ultimo.mes }}) tem {{ ultimo.saldo_cent|eur }}. No check-in em que o dinheiro já estiver no destino, grava aqui saldo 0 com o levantamento como aporte negativo, e lá o mesmo valor como aporte. Depois volta a esta página.</p>
+    {% endif %}
+    <button type="submit"{% if ultimo and ultimo.saldo_cent != 0 %} disabled{% endif %}>Desativar</button>
   </form>
   {% else %}
   <form method="post" action="/plataformas/{{ editar.id }}/reativar">

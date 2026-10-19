@@ -125,10 +125,33 @@ def test_proxima_ordem(conn):
 def test_desativar_nao_grava_registo_e_sai_do_checkin(conn):
     pid = _criar(conn)
     _reg(conn, pid, "2026-10", 50000)
+    _reg(conn, pid, "2026-11", 0, aporte=-50000)
     plataformas.desativar(conn, pid)
-    assert _registo(conn, pid, "2026-11") is None
-    assert checkin.linhas_checkin(conn, "2026-11") == []
-    assert plataformas.ultimo_saldo(conn, pid)[:] == ("2026-10", 50000)
+    assert _registo(conn, pid, "2026-12") is None
+    assert checkin.linhas_checkin(conn, "2026-12") == []
+    assert plataformas.ultimo_saldo(conn, pid)[:] == ("2026-11", 0)
+
+
+def test_desativar_com_saldo_e_recusado(conn):
+    pid = _criar(conn)
+    _reg(conn, pid, "2026-10", 50000)
+    with pytest.raises(ValueError, match="saldo 0"):
+        plataformas.desativar(conn, pid)
+    assert plataformas.obter(conn, pid)["ativa"] == 1
+
+
+def test_desativar_conta_o_ultimo_registo_e_nao_um_zero_antigo(conn):
+    pid = _criar(conn)
+    _reg(conn, pid, "2026-09", 0)
+    _reg(conn, pid, "2026-10", 100)
+    with pytest.raises(ValueError):
+        plataformas.desativar(conn, pid)
+
+
+def test_desativar_sem_registos_e_permitido(conn):
+    pid = _criar(conn)
+    plataformas.desativar(conn, pid)
+    assert plataformas.obter(conn, pid)["ativa"] == 0
 
 
 def test_desativar_duas_vezes_falha(conn):
@@ -139,22 +162,36 @@ def test_desativar_duas_vezes_falha(conn):
 
 
 def test_conta_fechada_passa_para_o_destino_sem_perda_falsa(conn):
-    """Z tinha 500 € em outubro, foi fechada e o dinheiro aparece na A no check-in de novembro."""
+    """Z tinha 500 € em outubro e foi fechada; no check-in de novembro fica a 0 e o dinheiro está na A."""
     a = _criar(conn, nome="A")
     z = _criar(conn, nome="Z")
     _reg(conn, a, "2026-10", 100000)
     _reg(conn, z, "2026-10", 50000)
-    plataformas.desativar(conn, z)
-    painel_outubro = dashboard.construir_painel(conn, date(2026, 10, 20))
-    assert painel_outubro.mes == "2026-10" and painel_outubro.totais.patrimonio_cent == 150000  # nada muda
     _reg(conn, a, "2026-11", 150200, aporte=50000)  # recebeu os 500 € e ganhou 2 €
+    _reg(conn, z, "2026-11", 0, aporte=-50000)  # levantamento
+    plataformas.desativar(conn, z)
     painel = dashboard.construir_painel(conn, HOJE)
     assert painel.totais.patrimonio_cent == 150200
     assert painel.totais.variacao_cent == 200
-    assert painel.totais.ganho_cent == 200
+    assert painel.totais.ganho_cent == 200  # sem perda falsa na Z
+    aportes = conn.execute("SELECT SUM(aporte_cent) FROM registos_mensais WHERE mes = '2026-11'").fetchone()[0]
+    assert aportes == 0  # a transferência não conta como poupança nova
     assert [c.nome for c in painel.cartoes] == ["A"]
     investimento = next(s for s in painel.evolucao if s.categoria == "investimento")
     assert investimento.valores_cent == (150000, 150200)  # o passado não muda
+
+
+def test_inativa_nao_volta_a_contar_nos_meses_seguintes(conn):
+    a = _criar(conn, nome="A")
+    z = _criar(conn, nome="Z")
+    _reg(conn, z, "2026-09", 30000)
+    _reg(conn, z, "2026-10", 0, aporte=-30000)
+    _reg(conn, a, "2026-10", 30000, aporte=30000)
+    _reg(conn, a, "2026-11", 30100)
+    plataformas.desativar(conn, z)
+    painel = dashboard.construir_painel(conn, HOJE)
+    investimento = next(s for s in painel.evolucao if s.categoria == "investimento")
+    assert investimento.valores_cent == (30000, 30000, 30100)
 
 
 def test_reativar(conn):
@@ -212,8 +249,19 @@ def test_ecra_editar_desativar_e_reativar(cliente):
     pid = db.connect().execute("SELECT id FROM plataformas").fetchone()[0]
     assert "Editar Corretora" in cliente.get(f"/plataformas/{pid}").text
     assert "atualizada" in cliente.post(f"/plataformas/{pid}", data=_form(nome="Corretora X")).text
-    assert "desativada" in cliente.post(f"/plataformas/{pid}/desativar").text
+    assert "desativada" in cliente.post(f"/plataformas/{pid}/desativar").text  # sem registos
     assert "reativada" in cliente.post(f"/plataformas/{pid}/reativar").text
+
+
+def test_ecra_desativar_com_saldo_mostra_o_caminho(cliente):
+    cliente.post("/plataformas", data=_form())
+    c = db.connect()
+    pid = c.execute("SELECT id FROM plataformas").fetchone()[0]
+    _reg(c, pid, "2026-10", 50000)
+    assert "disabled" in cliente.get(f"/plataformas/{pid}").text
+    r = cliente.post(f"/plataformas/{pid}/desativar")
+    assert r.status_code == 422 and "aporte negativo" in r.text
+    assert c.execute("SELECT ativa FROM plataformas").fetchone()[0] == 1
 
 
 def test_ecra_plataforma_inexistente(cliente):

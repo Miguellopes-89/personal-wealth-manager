@@ -3,10 +3,11 @@
 Lógica sem web, como em `checkin.py`: a camada web só lê o formulário e chama estas funções.
 
 Regras:
-- Desativar nunca apaga histórico nem grava registos. O painel conta uma inativa até ao seu último registo
-  e deixa de a contar no mês seguinte, que é quando o dinheiro aparece na plataforma de destino (lá
-  regista-se como aporte). Gravar um saldo 0 no mês do fecho criaria uma perda falsa: o destino só é lido
-  no check-in seguinte.
+- Fechar uma conta = saldo 0 (decisão de 19/10/2026, opção A). Só se desativa uma plataforma cujo último
+  registo tenha saldo 0 (ou que não tenha registos). O 0 grava-se no check-in em que o dinheiro já está no
+  destino, com o levantamento como aporte negativo; no destino entra como aporte positivo. Assim uma
+  transferência entre plataformas não conta como poupança nova e o património do passado não muda.
+  Desativar nunca apaga histórico nem grava registos.
 - Só se apaga uma plataforma sem registos (serve para corrigir uma criada por engano).
 - Mudar a categoria ou o "calcula ganho" de uma plataforma muda também o passado no painel.
 """
@@ -171,8 +172,19 @@ def atualizar(conn: sqlite3.Connection, plataforma_id: int, d: Dados) -> None:
 
 
 def desativar(conn: sqlite3.Connection, plataforma_id: int) -> None:
-    """Deixa de aparecer no check-in e nos cartões; o histórico fica."""
+    """Deixa de aparecer no check-in e nos cartões; o histórico fica.
+
+    ValueError se o último registo tiver saldo diferente de 0: o dinheiro sumiria do património sem
+    nenhum registo a explicá-lo.
+    """
     with conn:
+        ultimo = ultimo_saldo(conn, plataforma_id)
+        if ultimo is not None and ultimo["saldo_cent"] != 0:
+            raise ValueError(
+                f"O último registo ({ultimo['mes']}) tem saldo diferente de 0. Para fechar a conta, grava no "
+                "check-in o saldo 0 com o levantamento como aporte negativo (e o mesmo valor como aporte na "
+                "plataforma de destino); depois desativa-a."
+            )
         cur = conn.execute("UPDATE plataformas SET ativa = 0 WHERE id = ? AND ativa = 1", (plataforma_id,))
         if cur.rowcount == 0:
             raise LookupError("Plataforma inexistente ou já inativa")

@@ -329,7 +329,7 @@ def plataforma_acao(request: Request, plataforma_id: int, acao: str):
         try:
             if acao == "desativar":
                 plataformas.desativar(conn, plataforma_id)
-                msg = f"{p['nome']} desativada: o histórico fica no painel até ao último registo."
+                msg = f"{p['nome']} desativada: sai do check-in e dos cartões; o histórico fica no painel."
             elif acao == "reativar":
                 plataformas.reativar(conn, plataforma_id)
                 msg = f"{p['nome']} reativada: volta a aparecer no check-in."
