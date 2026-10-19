@@ -62,7 +62,8 @@ def test_checkboxes_ausentes_ficam_desligadas():
 
 @pytest.mark.parametrize("campo, valor", [
     ("nome", "  "), ("titular", ""), ("categoria", "acoes"), ("plano_mensal", "1.234.56"),
-    ("plano_mensal", "-5"), ("ordem", "um"),
+    ("plano_mensal", "-5"), ("ordem", "um"), ("ordem", "99999999999999999999"),
+    ("plano_mensal", "999999999999999999999"),
 ])
 def test_validar_rejeita(campo, valor):
     v = plataformas.validar(_form(**{campo: valor}))

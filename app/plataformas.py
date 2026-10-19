@@ -19,6 +19,8 @@ from datetime import date
 
 from app import calc, db, planos
 
+LIMITE_ORDEM = 1_000_000  # a ordem só arruma a lista; um inteiro enorme rebentava no SQLite (erro 500)
+
 
 @dataclass(frozen=True)
 class Dados:
@@ -76,6 +78,9 @@ def validar(form: dict[str, str]) -> Validacao:
             ordem = int(texto_ordem)
         except ValueError:
             erros["ordem"] = "A ordem tem de ser um número inteiro"
+        else:
+            if abs(ordem) > LIMITE_ORDEM:
+                erros["ordem"] = f"A ordem tem de estar entre -{LIMITE_ORDEM} e {LIMITE_ORDEM}"
 
     inicio = None
     if form.get("desafio"):

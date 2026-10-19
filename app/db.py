@@ -87,6 +87,9 @@ def connect(caminho: str | Path | None = None) -> sqlite3.Connection:
     """Abre a base de dados. Recusa caminhos dentro do OneDrive (decisão de arquitetura)."""
     destino = str(caminho) if caminho is not None else str(caminho_por_defeito())
     if destino != ":memory:":
+        # Caminho absoluto e sem atalhos: um PWM_DB relativo ("pwm.db") corrido dentro da pasta do projeto,
+        # ou uma ligação simbólica, caía no OneDrive sem a palavra aparecer no texto.
+        destino = str(Path(destino).expanduser().resolve())
         if "onedrive" in destino.lower() and not os.environ.get("PWM_PERMITIR_ONEDRIVE"):
             raise RuntimeError(
                 f"A base de dados não pode ficar no OneDrive: {destino}. "

@@ -82,6 +82,10 @@ def calcular_serie(registos: list[Registo], calcula_ganho: bool = True) -> list[
     return resultados
 
 
+# Teto de qualquer valor introduzido: 10 mil milhões de euros. Muito acima de um património pessoal real e
+# muito abaixo do INTEGER do SQLite (2^63-1): um valor maior rebentava com OverflowError (erro 500) ao gravar.
+LIMITE_CENT = 10**12
+
 _NUMERO = re.compile(r"[+-]?\d+(\.\d+)?")
 # Parte inteira com separador de milhares: grupos de 3 depois do primeiro ('1.234.567', não '1.23.4')
 _MILHARES = {sep: re.compile(rf"[+-]?\d{{1,3}}(\{sep}\d{{3}})+") for sep in ".,"}
@@ -117,7 +121,10 @@ def euros_para_cent(texto: str) -> int:
         raise ValueError(f"Valor inválido: {texto!r}") from None
     if not valor.is_finite():
         raise ValueError(f"Valor inválido: {texto!r}")
-    return int((valor * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    cent = int((valor * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    if abs(cent) > LIMITE_CENT:
+        raise ValueError(f"Valor fora do intervalo aceite: {texto!r}")
+    return cent
 
 
 def _validar_milhares(t: str, original: str) -> None:

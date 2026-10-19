@@ -156,3 +156,15 @@ def test_copia_anterior_a_tabela_configuracao_restaura_com_a_tabela_vazia(origem
 
     assert contagens["configuracao"] == 0
     assert contagens["registos_mensais"] == 3
+
+
+def test_inteiro_fora_do_sqlite_falha_sem_deixar_ficheiro(origem, tmp_path):
+    copia = _exportar(origem, tmp_path)
+    csv_reg = copia / "registos_mensais.csv"
+    texto = csv_reg.read_text(encoding="utf-8-sig").replace("104000", "9" * 25)
+    csv_reg.write_text(texto, encoding="utf-8-sig")
+    destino = tmp_path / "restaurada.db"
+
+    with pytest.raises(ValueError, match="fora do intervalo"):
+        restauro.restaurar(copia, destino)
+    assert not destino.exists()

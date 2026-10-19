@@ -155,3 +155,16 @@ def test_formatar_mes_para_o_ecra():
 def test_formatar_mes_rejeita_formato_invalido(mau):
     with pytest.raises(ValueError):
         calc.formatar_mes(mau)
+
+
+# --- limite de valores (evita OverflowError no SQLite) ------------------------
+
+def test_aceita_valor_no_limite():
+    assert euros_para_cent("10000000000,00") == calc.LIMITE_CENT
+    assert euros_para_cent("-10000000000,00") == -calc.LIMITE_CENT
+
+
+@pytest.mark.parametrize("texto", ["10000000000,01", "999999999999999999999", "-999999999999999999999"])
+def test_rejeita_valor_acima_do_limite(texto):
+    with pytest.raises(ValueError, match="fora do intervalo"):
+        euros_para_cent(texto)

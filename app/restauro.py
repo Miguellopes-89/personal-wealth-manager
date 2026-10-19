@@ -73,9 +73,12 @@ def _carregar_tabela(conn: sqlite3.Connection, tabela: str, ficheiro: Path) -> i
                     valores.append(None)
                 elif tipo == "INTEGER":
                     try:  # o SQLite aceitaria texto numa coluna INTEGER sem protestar
-                        valores.append(int(texto))
+                        inteiro = int(texto)
                     except ValueError:
                         raise ValueError(f"{ficheiro.name} linha {n}: '{texto}' não é inteiro ({nome})") from None
+                    if not -(2**63) <= inteiro < 2**63:  # senão OverflowError, fora dos erros tratados no main
+                        raise ValueError(f"{ficheiro.name} linha {n}: '{texto}' fora do intervalo do SQLite ({nome})")
+                    valores.append(inteiro)
                 else:
                     valores.append(texto)
             linhas.append(valores)

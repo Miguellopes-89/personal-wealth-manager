@@ -95,3 +95,14 @@ def test_caminho_por_defeito_fora_do_onedrive(monkeypatch):
     monkeypatch.delenv("PWM_DB", raising=False)
     monkeypatch.setenv("LOCALAPPDATA", r"C:\Users\User\AppData\Local")
     assert "onedrive" not in str(db.caminho_por_defeito()).lower()
+
+
+def test_recusa_onedrive_por_caminho_relativo(monkeypatch, tmp_path):
+    """Um PWM_DB relativo corrido dentro de uma pasta do OneDrive também é recusado."""
+    monkeypatch.delenv("PWM_PERMITIR_ONEDRIVE", raising=False)
+    pasta = tmp_path / "OneDrive" / "Projetos"
+    pasta.mkdir(parents=True)
+    monkeypatch.chdir(pasta)
+    with pytest.raises(RuntimeError):
+        db.connect("pwm.db")
+    assert not (pasta / "pwm.db").exists()

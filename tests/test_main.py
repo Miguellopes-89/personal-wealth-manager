@@ -46,3 +46,13 @@ def test_post_da_propria_app_passa(monkeypatch, tmp_path):
     with _cliente(monkeypatch, tmp_path) as c:
         r = c.post("/checkin", data={"mes": "2026-01"}, headers={"origin": "http://127.0.0.1:8000"})
     assert r.status_code == 200
+
+
+def test_valores_enormes_dao_erro_de_validacao_e_nao_500(monkeypatch, tmp_path):
+    """Um número gigante num campo de euros ou na ordem é recusado no formulário (antes rebentava no SQLite)."""
+    gigante = "999999999999999999999"
+    with _cliente(monkeypatch, tmp_path) as cliente:
+        r = cliente.post("/plataformas", data={"nome": "G", "titular": "A", "categoria": "p2p", "ordem": gigante})
+        assert r.status_code == 422
+        r = cliente.post("/configuracao/despesa-mensal", data={"despesa_mensal": gigante})
+        assert r.status_code == 422
