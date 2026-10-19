@@ -5,16 +5,27 @@ num único ecrã e vês logo o resultado (ganho do mês, avisos), sem passar por
 
 Os dados ficam na tua máquina, numa base de dados SQLite. Não há contas, nem serviços externos, nem CDN.
 
-> **Estado:** em desenvolvimento. Estão prontos o painel, o check-in mensal, a gestão de plataformas, a
-> cópia de segurança e o restauro. Falta o design final.
+> **Estado:** versão 1 completa: painel, check-in mensal, gestão de plataformas, cópia de segurança e restauro,
+> com o design final. Em uso desde outubro de 2026. Próximo: metas de poupança, cobertura do fundo de
+> liberdade e comparação com índices.
+
+![Painel](docs/capturas/painel.png)
+
+| Check-in mensal | Plataformas | Janela estreita |
+|---|---|---|
+| ![Check-in mensal](docs/capturas/checkin.png) | ![Plataformas](docs/capturas/plataformas.png) | ![Painel numa janela estreita](docs/capturas/painel-telemovel.png) |
+
+As capturas usam os dados fictícios da demonstração (ver abaixo).
 
 ## O que já faz
 
 - **Painel** (`/`): património total, variação face ao mês anterior e ganho do mês; evolução do património
-  por categoria, alocação (poupança, investimento, reforma), um cartão por plataforma (aporte real vs plano)
-  e o progresso do Desafio das 52 semanas. Gráficos com Chart.js guardado localmente.
+  por categoria, alocação (poupança, investimento, reforma), a lista das plataformas agrupada por categoria
+  (saldo, ganho, aporte real vs plano) e o progresso do Desafio das 52 semanas. Gráficos com Chart.js guardado
+  localmente.
 - **Check-in mensal** (`/checkin`): uma linha por plataforma, com o saldo do mês anterior só como
-  referência e o aporte pré-preenchido pelo plano. Grava tudo ou nada, e mostra o ganho do mês e os avisos
+  referência e o aporte pré-preenchido pelo plano (no Desafio das 52 semanas, agrupado por mês com o detalhe
+  das semanas ao clicar). Grava tudo ou nada, e mostra o ganho do mês e os avisos
   logo a seguir. Regravar um mês atualiza-o, não duplica.
 - **Plataformas** (`/plataformas`): criar, editar, desativar e reativar (com o plano mensal ou o Desafio das
   52 semanas). Só se desativa uma conta fechada: primeiro grava-se no check-in o saldo 0, com o levantamento
@@ -30,6 +41,9 @@ Os dados ficam na tua máquina, numa base de dados SQLite. Não há contas, nem 
   gravação e no botão "Guardar e sair". Nunca sobrescreve, não duplica cópias iguais, mantém as 30 mais
   recentes e a última de cada mês.
 - **Restauro** para uma base nova ao lado, sem tocar na atual, com validação dos dados.
+- **Formatos portugueses no ecrã:** valores em `1.234,56 €`, meses em `09-2026`, datas em `19-10-2026`.
+- **Ecrãs que se adaptam** a janelas estreitas (a captura "Janela estreita" mostra a mesma página com 390 px de
+  largura). O servidor só aceita pedidos da própria máquina, por isso a app não se abre noutro dispositivo.
 
 ## Decisões de desenho
 
@@ -113,13 +127,16 @@ app/
   db.py          ligação, esquema e migrações (SQLite)
   backup.py      cópia de segurança em CSV
   restauro.py    restauro para uma base nova
-  templates/     páginas HTML (Jinja2)
+  templates/     páginas HTML (Jinja2); base.html tem a barra lateral
+  static/        estilo (css/pwm.css), Chart.js e o tipo de letra, tudo local
 scripts/
   pwm.bat        arranque no Windows
   seed_demo.py   dados de demonstração
 tests/           testes (pytest)
+docs/capturas/   capturas de ecrã para este README
 ```
 
 ## Licença
 
-[MIT](LICENSE).
+[MIT](LICENSE). Inclui o Chart.js (MIT) e o tipo de letra IBM Plex Sans (SIL Open Font License 1.1,
+`app/static/vendor/fonts/OFL-IBM-Plex-Sans.txt`).

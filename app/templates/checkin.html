@@ -1,44 +1,16 @@
-<!doctype html>
-<html lang="pt">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Check-in mensal · Personal Wealth Manager</title>
-<style>
-  /* Estilo provisório: o design Monarch fica para a sessão 7. */
-  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1b1f24; }
-  h1 { margin-bottom: .25rem; }
-  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #e3e6ea; vertical-align: top; }
-  th { font-size: .8rem; text-transform: uppercase; color: #5b6570; }
-  td.num, th.num { text-align: right; }
-  input[type=text] { width: 8.5rem; padding: .35rem; text-align: right; font-size: 1rem; }
-  input.erro { border: 2px solid #c0392b; }
-  .ref { color: #5b6570; font-size: .9rem; }
-  .sub { color: #5b6570; font-size: .85rem; }
-  .msg-erro { color: #c0392b; font-size: .85rem; }
-  .banner { padding: .6rem .9rem; border-radius: 6px; margin: 1rem 0; }
-  .banner.erro { background: #fdecea; color: #922b21; }
-  .banner.ok { background: #e8f6ec; color: #1e6b36; }
-  .aviso { color: #9a6700; font-size: .85rem; }
-  button { font-size: 1rem; padding: .55rem 1.2rem; cursor: pointer; }
-  .destino { margin: .5rem 0; }
-  button:disabled { cursor: not-allowed; opacity: .5; }
-  details.mes-plano summary { cursor: pointer; }
-  details.mes-plano > div { padding-left: 1rem; }
-  form.mes { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
-</style>
-</head>
-<body>
-<p><a href="/">&larr; Início</a> · <a href="/plataformas">Plataformas</a></p>
-<h1>Check-in mensal</h1>
+{% extends "base.html" %}
+{% block titulo %}Check-in mensal{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><h1>Check-in mensal</h1></div>
 
-<form class="mes" method="get" action="/checkin">
-  <label for="mes">Mês:</label>
-  <input type="month" id="mes" name="mes" value="{{ mes }}">
-  <label for="data">Data da leitura:</label>
-  <input type="date" id="data" name="data" value="{{ data_leitura }}">
-  <button type="submit">Abrir</button>
+<form class="caixa topo-checkin" method="get" action="/checkin">
+  <label for="mes">Mês
+    <input type="month" id="mes" name="mes" value="{{ mes }}">
+  </label>
+  <label for="data">Data da leitura
+    <input type="date" id="data" name="data" value="{{ data_leitura }}">
+  </label>
+  <button type="submit" class="secundario">Abrir</button>
 </form>
 
 {% if erro_geral %}<div class="banner erro">{{ erro_geral }}</div>{% endif %}
@@ -50,6 +22,7 @@
   {% if resultado.ignorados %}{{ resultado.ignorados|length }} sem saldo preenchido (não alteradas).{% endif %}
 </div>
 {% if resultado.gravados %}
+<div class="tabela">
 <table>
   <thead><tr><th>Plataforma</th><th class="num">Saldo</th><th class="num">Aporte</th><th class="num">Ganho do mês</th><th>Avisos</th></tr></thead>
   <tbody>
@@ -64,18 +37,20 @@
   {% endfor %}
   </tbody>
 </table>
-<p class="sub">Aportes gravados: <strong>{{ resultado.gravados|sum(attribute='resultado.aporte_cent')|eur }}</strong>. Confirma contra as transferências que fizeste.</p>
+</div>
+<p class="sub notas">Aportes gravados: <strong>{{ resultado.gravados|sum(attribute='resultado.aporte_cent')|eur }}</strong>. Confirma contra as transferências que fizeste.</p>
 {% endif %}
 {% endif %}
 
 <form method="post" action="/checkin">
   <input type="hidden" name="mes" value="{{ mes }}">
   <input type="hidden" name="data" value="{{ data_leitura }}">
-  <table>
+  <div class="tabela">
+  <table class="checkin">
     <thead>
       <tr>
         <th>Plataforma</th>
-        <th class="num">Referência (mês anterior)</th>
+        <th class="num">Mês anterior</th>
         <th class="num">Saldo atual (€)</th>
         <th class="num">Aporte do mês (€)</th>
       </tr>
@@ -85,16 +60,16 @@
       {% set l = item.l %}
       <tr>
         <td>
-          {{ l.nome }}
+          <strong style="font-weight: 500">{{ l.nome }}</strong>
           <div class="sub">{{ l.categoria|categoria }} · {{ l.titular }}{% if not l.calcula_ganho %} · só saldo{% endif %}{% if l.registado %} · já registado{% endif %}</div>
           {% if item.erro %}<div class="msg-erro">{{ item.erro }}</div>{% endif %}
         </td>
-        <td class="num ref">
+        <td class="num ref" data-rotulo="Mês anterior">
           {% if l.saldo_anterior_cent is none %}sem registo{% else %}{{ l.saldo_anterior_cent|eur }} <div class="sub">{{ l.mes_anterior|mes }}</div>{% endif %}
         </td>
-        <td class="num"><input type="text" inputmode="decimal" autocomplete="off" name="saldo_{{ l.plataforma_id }}" value="{{ item.saldo }}" placeholder="—"{% if item.erro %} class="erro"{% endif %}></td>
-        <td class="num">
-          <input type="text" inputmode="decimal" autocomplete="off" name="aporte_{{ l.plataforma_id }}" value="{{ item.aporte }}">
+        <td class="num" data-rotulo="Saldo atual (€)"><input type="text" inputmode="decimal" autocomplete="off" name="saldo_{{ l.plataforma_id }}" value="{{ item.saldo }}" placeholder="—" aria-label="Saldo atual de {{ l.nome }}"{% if item.erro %} class="erro"{% endif %}></td>
+        <td class="num" data-rotulo="Aporte do mês (€)">
+          <input type="text" inputmode="decimal" autocomplete="off" name="aporte_{{ l.plataforma_id }}" value="{{ item.aporte }}" aria-label="Aporte do mês de {{ l.nome }}">
           {% if l.sugestao %}
           <div class="sub">
             Plano: {{ l.sugestao.total_cent|eur }}{% if not l.sugestao.semanas %} (nenhum domingo desde {{ l.data_leitura_anterior.strftime('%d/%m') }}){% endif %}
@@ -116,16 +91,17 @@
     {% endfor %}
     </tbody>
   </table>
-  <p class="sub">Vírgula para os cêntimos (12,50). Saldo em branco = plataforma não alterada. Levantamentos: aporte negativo (-100,00).</p>
-  <p class="destino">Vai gravar em <strong>{{ mes|mes }}</strong>, leitura de <strong>{{ data_leitura[8:10] }}-{{ data_leitura[5:7] }}-{{ data_leitura[:4] }}</strong>.</p>
-  <p id="aviso-mudanca" class="banner erro" hidden>Mudaste o mês ou a data lá em cima: carrega em <strong>Abrir</strong> antes de gravar (o aporte sugerido depende deles).</p>
-  <button type="submit" id="gravar">Gravar check-in</button>
+  </div>
+  <p class="sub notas">Vírgula para os cêntimos (12,50). Saldo em branco = plataforma não alterada. Levantamentos: aporte negativo (-100,00).</p>
+  <div class="acoes">
+    <p class="destino">Vai gravar em <strong>{{ mes|mes }}</strong>, leitura de <strong>{{ data_leitura[8:10] }}-{{ data_leitura[5:7] }}-{{ data_leitura[:4] }}</strong>.</p>
+    <button type="submit" id="gravar">Gravar check-in</button>
+    <p id="aviso-mudanca" class="banner erro" hidden>Mudaste o mês ou a data lá em cima: carrega em <strong>Abrir</strong> antes de gravar (o aporte sugerido depende deles).</p>
+  </div>
 </form>
-<hr>
-<form method="post" action="/sair" id="form-sair">
-  <button type="submit">Guardar e sair</button>
-  <span class="sub">Faz a cópia de segurança e fecha a aplicação.</span>
-</form>
+{% endblock %}
+
+{% block scripts %}
 <script>
 // Os campos do topo só contam depois de "Abrir": até lá, não deixa gravar com o mês ou a data antigos.
 (() => {
@@ -138,7 +114,7 @@
   };
   topo.mes.addEventListener('input', verificar); topo.data.addEventListener('input', verificar);
 })();
-// "Guardar e sair" grava a cópia de segurança, não o check-in: avisa se há valores escritos e por gravar.
+// "Guardar e sair" (na barra lateral) grava a cópia de segurança, não o check-in: avisa se há valores escritos e por gravar.
 (() => {
   const campos = [...document.querySelectorAll('input[name^="saldo_"], input[name^="aporte_"]')];
   const iniciais = new Map(campos.map(c => [c, c.value]));
@@ -150,5 +126,4 @@
   });
 })();
 </script>
-</body>
-</html>
+{% endblock %}
