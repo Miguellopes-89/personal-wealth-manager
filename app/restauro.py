@@ -23,6 +23,8 @@ from app import backup, db
 # Colunas acrescentadas ao fim de uma tabela em versões posteriores do esquema: as cópias antigas não as
 # têm e continuam a restaurar-se (ficam NULL). Qualquer outra coluna em falta continua a ser erro.
 COLUNAS_OPCIONAIS = {"registos_mensais": ("data_leitura",)}
+# Tabelas acrescentadas em versões posteriores: uma cópia antiga sem o CSV restaura-se com a tabela vazia.
+TABELAS_OPCIONAIS = ("configuracao",)
 
 
 def ultima_copia(pasta_base: Path) -> Path:
@@ -40,6 +42,8 @@ def destino_por_defeito(agora: datetime | None = None) -> Path:
 
 def _carregar_tabela(conn: sqlite3.Connection, tabela: str, ficheiro: Path) -> int:
     if not ficheiro.is_file():
+        if tabela in TABELAS_OPCIONAIS:
+            return 0
         raise FileNotFoundError(f"Falta o ficheiro {ficheiro.name} na cópia")
     colunas = [(r["name"], r["type"].upper()) for r in conn.execute(f"PRAGMA table_info({tabela})")]
     nomes = [c[0] for c in colunas]

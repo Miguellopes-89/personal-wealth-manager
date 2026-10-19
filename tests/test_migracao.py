@@ -44,6 +44,21 @@ def test_base_v1_migra_sem_perder_dados():
     conn.close()
 
 
+def test_base_v2_ganha_a_tabela_configuracao_sem_perder_dados():
+    conn = db.connect(":memory:")
+    conn.executescript(ESQUEMA_V1)
+    conn.execute("ALTER TABLE registos_mensais ADD COLUMN data_leitura TEXT")
+    conn.execute("UPDATE registos_mensais SET data_leitura = '2026-10-13'")
+    conn.execute("PRAGMA user_version = 2")
+
+    db.init_db(conn)
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert conn.execute("SELECT COUNT(*) FROM configuracao").fetchone()[0] == 0
+    assert conn.execute("SELECT saldo_cent, data_leitura FROM registos_mensais").fetchone()[:] == (500000, "2026-10-13")
+    conn.close()
+
+
 def test_migracao_e_idempotente():
     conn = db.connect(":memory:")
     conn.executescript(ESQUEMA_V1)

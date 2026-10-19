@@ -14,6 +14,8 @@
   <h1>Painel</h1>
   <p class="sub">Dados de {{ painel.mes|mes }}</p>
 </div>
+{% if aviso_backup %}<div class="banner erro">{{ aviso_backup }}</div>{% endif %}
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
 {% if painel.desatualizado %}
 <div class="banner">O último check-in é de {{ painel.mes|mes }}; ainda não há o de {{ painel.mes_atual|mes }}. <a href="/checkin">Fazer check-in</a></div>
 {% endif %}
@@ -65,6 +67,29 @@
     {% endif %}
   </section>
 </div>
+
+{% set cob = painel.cobertura %}
+{% if cob %}
+<h2>Fundo de liberdade</h2>
+<section class="caixa cobertura" aria-label="Cobertura do fundo de liberdade">
+  <div>
+    {% if cob.meses is not none %}
+    <div class="numero">{{ '%.1f'|format(cob.meses)|replace('.', ',') }} meses</div>
+    <div class="sub">de despesas cobertos em {{ painel.mes|mes }}: {{ cob.saldo_cent|eur }} ÷ {{ cob.despesa_mensal_cent|eur }} por mês</div>
+    {% else %}
+    <div class="numero">{{ cob.saldo_cent|eur }}</div>
+    <div class="sub">Define a despesa mensal de referência para ver quantos meses o fundo cobre.</div>
+    {% endif %}
+  </div>
+  <form method="post" action="/configuracao/despesa-mensal" class="linha-form">
+    <label>Despesa mensal de referência (€)
+      <input type="text" inputmode="decimal" name="despesa_mensal" value="{{ despesa_texto }}"{% if erro_despesa %} class="erro"{% endif %}>
+    </label>
+    <button type="submit" class="secundario">Guardar</button>
+    {% if erro_despesa %}<span class="msg-erro">{{ erro_despesa }}</span>{% endif %}
+  </form>
+</section>
+{% endif %}
 
 <h2>Plataformas</h2>
 <section class="caixa contas">

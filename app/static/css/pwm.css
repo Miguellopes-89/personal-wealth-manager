@@ -136,6 +136,14 @@ td.num, th.num { text-align: right; }
 .conta .detalhe { font-size: .85rem; }
 .conta .detalhe span { color: var(--secundario); }
 
+/* Fundo de liberdade: cobertura em meses + campo da despesa de referência */
+.cobertura { display: flex; justify-content: space-between; align-items: end; gap: 1rem 2rem; flex-wrap: wrap; }
+.cobertura .numero { font-size: 1.6rem; font-weight: 600; letter-spacing: -0.01em; }
+.linha-form { display: flex; gap: .6rem; align-items: end; flex-wrap: wrap; }
+.linha-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--secundario); }
+.linha-form input[type=text] { width: 9rem; text-align: right; }
+.linha-form .msg-erro { flex-basis: 100%; }
+
 .barra { background: var(--linha); border-radius: 999px; height: 8px; overflow: hidden; margin: .6rem 0; }
 .barra > div { background: var(--acento); height: 100%; border-radius: 999px; }
 ul.simples { margin: .3rem 0; padding-left: 1.2rem; }

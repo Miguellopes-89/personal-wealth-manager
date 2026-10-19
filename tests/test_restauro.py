@@ -27,6 +27,7 @@ def origem(tmp_path):
         ],
     )
     conn.execute("INSERT INTO planos (plataforma_id, tipo, data_inicio) VALUES (1, 'dca', '2024-01-01')")
+    conn.execute("INSERT INTO configuracao (chave, valor) VALUES ('despesa_mensal_cent', 150000)")
     conn.commit()
     yield conn
     conn.close()
@@ -48,7 +49,7 @@ def test_ida_e_volta_reproduz_exatamente_os_dados(origem, tmp_path):
 
     contagens = restauro.restaurar(copia, destino)
 
-    assert contagens == {"plataformas": 2, "registos_mensais": 3, "planos": 1}
+    assert contagens == {"plataformas": 2, "registos_mensais": 3, "planos": 1, "configuracao": 1}
     nova = db.connect(destino)
     try:
         assert _tudo(nova) == _tudo(origem)  # inclui NULL, ';', aspas e aporte negativo
@@ -143,3 +144,15 @@ def test_main_devolve_1_e_mensagem_quando_falha(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("PWM_BACKUP", str(tmp_path / "vazio"))
     assert restauro.main(["--destino", str(tmp_path / "x.db")]) == 1
     assert "Restauro falhou" in capsys.readouterr().out
+
+
+def test_copia_anterior_a_tabela_configuracao_restaura_com_a_tabela_vazia(origem, tmp_path):
+    """As cópias de antes da versão 3 do esquema não têm configuracao.csv."""
+    copia = _exportar(origem, tmp_path)
+    (copia / "configuracao.csv").unlink()
+    destino = tmp_path / "restaurada.db"
+
+    contagens = restauro.restaurar(copia, destino)
+
+    assert contagens["configuracao"] == 0
+    assert contagens["registos_mensais"] == 3

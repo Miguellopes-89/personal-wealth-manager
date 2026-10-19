@@ -10,6 +10,8 @@ Regras:
 - O saldo de um mês sem registo é o do último registo anterior: uma plataforma que não foi tocada
   num check-in não desaparece do património nem faz o gráfico "cair".
 - O painel mostra o último mês com registos (`Painel.mes`); `desatualizado` diz se já passou o mês atual.
+- A cobertura do fundo de liberdade é o saldo da categoria `emergencia` no mês do painel a dividir pela
+  despesa mensal de referência (`configuracao.py`); sem referência, o painel mostra só o saldo.
 - O "previsto" do Desafio das 52 semanas é o do plano (domingos até hoje), não o que foi depositado:
   o modelo de dados só guarda o aporte do mês, não cada depósito semanal.
 """
@@ -19,7 +21,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import date
 
-from app import calc, checkin, db, planos
+from app import calc, checkin, configuracao, db, planos
 
 ROTULOS_CATEGORIA = {
     "conta_corrente": "Conta corrente",
@@ -33,6 +35,8 @@ ROTULOS_CATEGORIA = {
     "numerario": "Numerário",
     "cripto": "Cripto",
 }
+
+CATEGORIA_FUNDO = "emergencia"  # código interno; no ecrã é o "Fundo de liberdade"
 
 TOTAL_DESAFIO_CENT = 100 * sum(range(1, planos.SEMANAS_DO_DESAFIO + 1))  # 1.378,00 €
 
@@ -92,6 +96,21 @@ class ProgressoDesafio:
 
 
 @dataclass(frozen=True)
+class Cobertura:
+    """Quantos meses de despesas o fundo de liberdade paga, no mês do painel."""
+
+    saldo_cent: int
+    despesa_mensal_cent: int | None  # None = referência ainda não definida
+
+    @property
+    def meses(self) -> float | None:
+        """Só para mostrar (uma casa decimal); os valores de verdade estão em cêntimos."""
+        if not self.despesa_mensal_cent:
+            return None
+        return self.saldo_cent / self.despesa_mensal_cent
+
+
+@dataclass(frozen=True)
 class Painel:
     mes: str
     mes_atual: str
@@ -102,6 +121,7 @@ class Painel:
     evolucao: tuple[SerieCategoria, ...]
     alocacao: tuple[FatiaAlocacao, ...]
     desafios: tuple[ProgressoDesafio, ...]
+    cobertura: Cobertura | None = None  # None se não há plataformas da categoria do fundo de liberdade
 
 
 def _meses_entre(primeiro: str, ultimo: str) -> list[str]:
@@ -252,6 +272,11 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
         semana = sugestao.semanas[-1].numero if sugestao.semanas else 0
         desafios.append(ProgressoDesafio(p["nome"], hoje.year, semana, sugestao.total_cent, TOTAL_DESAFIO_CENT))
 
+    # Fundo de liberdade: mesma regra do património (inativas contam até ao último registo, que é 0)
+    cobertura = None
+    if CATEGORIA_FUNDO in por_categoria:
+        cobertura = Cobertura(por_categoria[CATEGORIA_FUNDO][-1], configuracao.obter_despesa_mensal(conn))
+
     mes_atual = checkin.mes_de(hoje)
     return Painel(
         mes=mes,
@@ -263,6 +288,7 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
         evolucao=evolucao,
         alocacao=alocacao,
         desafios=tuple(desafios),
+        cobertura=cobertura,
     )
 
 

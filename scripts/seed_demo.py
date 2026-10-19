@@ -17,7 +17,7 @@ import os
 import sqlite3
 from datetime import date
 
-from app import checkin, db, planos
+from app import checkin, configuracao, db, planos
 
 # nome, categoria, titular, plano mensal (€), calcula ganho, entra na alocação
 PLATAFORMAS = [
@@ -38,6 +38,8 @@ NOME_P2P = "Plataforma P2P"  # tem o Desafio das 52 semanas
 INICIO_DESAFIO = "2024-01-01"
 
 LEITURAS = [date(2026, 7, 1), date(2026, 8, 1), date(2026, 9, 1)]
+
+DESPESA_MENSAL_EUR = 1500  # referência fictícia para a cobertura do fundo de liberdade
 
 # Plataformas com ganho: saldo inicial (€) e rendimento mensal fictício.
 INICIAL_EUR = {
@@ -70,8 +72,15 @@ SO_SALDO_EUR = {
 
 
 def carregar(conn: sqlite3.Connection) -> None:
-    """Insere plataformas, o plano do Desafio e três meses de registos fictícios (tudo numa transação)."""
+    """Insere plataformas, o plano do Desafio, a despesa de referência e três meses de registos fictícios.
+
+    Tudo numa transação.
+    """
     with conn:
+        conn.execute(
+            "INSERT INTO configuracao (chave, valor) VALUES (?, ?)",
+            (configuracao.DESPESA_MENSAL, DESPESA_MENSAL_EUR * 100),
+        )
         for ordem, (nome, cat, titular, plano_eur, ganho, aloc) in enumerate(PLATAFORMAS, start=1):
             conn.execute(
                 """INSERT INTO plataformas

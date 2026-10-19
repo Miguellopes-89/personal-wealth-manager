@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-from app import calc, dashboard, db, planos
+from app import calc, configuracao, dashboard, db, planos
 from app.main import app
 
 HOJE = date(2026, 10, 19)  # segunda-feira; o último domingo foi 18/10 (42.º de 2026)
@@ -355,3 +355,126 @@ def test_painel_mostra_meses_como_mm_aaaa(cliente):
     r = cliente.get("/")
     assert "Dados de 01-2026" in r.text
     assert "legend: { display: false }" in r.text  # donut: a legenda fica só na lista por baixo
+
+
+# --- Fundo de liberdade --------------------------------------------------------------------
+
+
+def test_sem_plataforma_do_fundo_nao_ha_cobertura(conn):
+    a = _plat(conn, "Corretora")
+    _reg(conn, a, "2026-09", 100000)
+    assert dashboard.construir_painel(conn, HOJE).cobertura is None
+
+
+def test_cobertura_sem_referencia_mostra_so_o_saldo(conn):
+    f = _plat(conn, "Fundo", categoria="emergencia", aloc=0)
+    _reg(conn, f, "2026-09", 300000)
+    cob = dashboard.construir_painel(conn, HOJE).cobertura
+    assert cob.saldo_cent == 300000
+    assert cob.despesa_mensal_cent is None and cob.meses is None
+
+
+def test_cobertura_soma_as_contas_do_fundo_no_mes_do_painel(conn):
+    f1 = _plat(conn, "Fundo A", categoria="emergencia", aloc=0)
+    f2 = _plat(conn, "Fundo B", categoria="emergencia", aloc=0)
+    outra = _plat(conn, "Corretora")
+    _reg(conn, f1, "2026-08", 100000)
+    _reg(conn, f1, "2026-09", 200000)
+    _reg(conn, f2, "2026-08", 100000)  # sem registo em setembro: conta com o último saldo
+    _reg(conn, outra, "2026-09", 999900)
+    configuracao.definir_despesa_mensal(conn, 150000)
+
+    cob = dashboard.construir_painel(conn, HOJE).cobertura
+
+    assert cob.saldo_cent == 300000
+    assert cob.meses == 2.0
+
+
+def test_cobertura_com_conta_do_fundo_fechada(conn):
+    """Uma conta do fundo fechada (saldo 0, inativa) não infla nem anula a cobertura."""
+    fechada = _plat(conn, "Fundo antigo", categoria="emergencia", aloc=0, ativa=0)
+    nova = _plat(conn, "Fundo novo", categoria="emergencia", aloc=0)
+    _reg(conn, fechada, "2026-08", 0, aporte=-100000)
+    _reg(conn, nova, "2026-08", 100000, aporte=100000)
+    _reg(conn, nova, "2026-09", 100100)
+    configuracao.definir_despesa_mensal(conn, 100000)
+    assert dashboard.construir_painel(conn, HOJE).cobertura.saldo_cent == 100100
+
+
+def test_pagina_mostra_cobertura_em_meses(cliente):
+    c = db.connect()
+    try:
+        f = _plat(c, "Fundo Exemplo", categoria="emergencia", aloc=0)
+        _reg(c, f, "2026-01", 1234500)
+        c.commit()
+        configuracao.definir_despesa_mensal(c, 98000)
+    finally:
+        c.close()
+    r = cliente.get("/")
+    assert "12,6 meses" in r.text
+    assert calc.formatar_euros(98000) in r.text
+    assert 'value="980,00"' in r.text
+
+
+def test_gravar_despesa_pelo_painel(cliente, monkeypatch, tmp_path):
+    copias = tmp_path / "copias"
+    monkeypatch.setenv("PWM_BACKUP", str(copias))
+    c = db.connect()
+    try:
+        f = _plat(c, "Fundo Exemplo", categoria="emergencia", aloc=0)
+        _reg(c, f, "2026-01", 300000)
+        c.commit()
+    finally:
+        c.close()
+
+    r = cliente.post("/configuracao/despesa-mensal", data={"despesa_mensal": "1.500,00"})
+
+    assert r.status_code == 200
+    assert "2,0 meses" in r.text
+    c = db.connect()
+    try:
+        assert configuracao.obter_despesa_mensal(c) == 150000
+    finally:
+        c.close()
+    assert any(copias.iterdir())  # a alteração entra numa cópia de segurança
+
+
+def test_despesa_invalida_nao_grava_e_mantem_o_texto(cliente):
+    c = db.connect()
+    try:
+        f = _plat(c, "Fundo Exemplo", categoria="emergencia", aloc=0)
+        _reg(c, f, "2026-01", 300000)
+        c.commit()
+    finally:
+        c.close()
+
+    r = cliente.post("/configuracao/despesa-mensal", data={"despesa_mensal": "0"})
+
+    assert r.status_code == 422
+    assert "maior que zero" in r.text
+    assert 'value="0"' in r.text
+    c = db.connect()
+    try:
+        assert configuracao.obter_despesa_mensal(c) is None
+    finally:
+        c.close()
+
+
+def test_despesa_em_branco_apaga_a_referencia(cliente):
+    c = db.connect()
+    try:
+        f = _plat(c, "Fundo Exemplo", categoria="emergencia", aloc=0)
+        _reg(c, f, "2026-01", 300000)
+        c.commit()
+        configuracao.definir_despesa_mensal(c, 150000)
+    finally:
+        c.close()
+    r = cliente.post("/configuracao/despesa-mensal", data={"despesa_mensal": ""})
+    assert r.status_code == 200
+    assert "Define a despesa mensal de referência" in r.text
+
+
+def test_despesa_de_outra_origem_e_recusada(cliente):
+    r = cliente.post("/configuracao/despesa-mensal", data={"despesa_mensal": "1500"},
+                     headers={"origin": "https://atacante.example"})
+    assert r.status_code == 403

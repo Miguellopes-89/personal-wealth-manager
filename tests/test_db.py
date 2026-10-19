@@ -23,7 +23,7 @@ def _plataforma(conn, nome="Degiro", categoria="investimento"):
 
 def test_init_cria_tabelas_e_versao(conn):
     tabelas = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    assert {"plataformas", "registos_mensais", "planos"} <= tabelas
+    assert {"plataformas", "registos_mensais", "planos", "configuracao"} <= tabelas
     assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
 
 

@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import backup, calc, checkin, dashboard, db, plataformas
+from app import backup, calc, checkin, configuracao, dashboard, db, plataformas
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["eur"] = calc.formatar_euros
@@ -60,20 +60,52 @@ async def so_pedidos_locais(request: Request, call_next):
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static"), check_dir=False), name="static")
 
 
-@app.get("/", response_class=HTMLResponse)
-def inicio(request: Request):
-    conn = db.connect()
-    try:
-        painel = dashboard.construir_painel(conn)
-    finally:
-        conn.close()
+def _ecra_painel(request: Request, conn, *, despesa_texto=None, erro_despesa=None, msg=None,
+                 aviso_backup=None, status_code=200):
+    """Painel. `despesa_texto`: o que foi escrito no campo da despesa (para não o perder num erro)."""
+    painel = dashboard.construir_painel(conn)
+    if despesa_texto is None:
+        atual = painel.cobertura.despesa_mensal_cent if painel and painel.cobertura else None
+        despesa_texto = checkin.cent_para_texto(atual) if atual is not None else ""
     contexto = {
         "painel": painel,
         "dados": dashboard.dados_graficos(painel) if painel else None,
         "avisos": AVISOS,
         "rotulos": dashboard.ROTULOS_CATEGORIA,
+        "despesa_texto": despesa_texto,
+        "erro_despesa": erro_despesa,
+        "msg": msg,
+        "aviso_backup": aviso_backup,
     }
-    return templates.TemplateResponse(request, "dashboard.html", contexto)
+    return templates.TemplateResponse(request, "dashboard.html", contexto, status_code=status_code)
+
+
+@app.get("/", response_class=HTMLResponse)
+def inicio(request: Request):
+    conn = db.connect()
+    try:
+        return _ecra_painel(request, conn)
+    finally:
+        conn.close()
+
+
+@app.post("/configuracao/despesa-mensal", response_class=HTMLResponse)
+async def despesa_mensal_gravar(request: Request):
+    """Grava a despesa mensal de referência (em branco = apagar). Responde com o painel."""
+    texto = str((await request.form()).get("despesa_mensal", ""))
+    conn = db.connect()
+    try:
+        try:
+            cent = configuracao.validar_despesa_mensal(texto)
+        except ValueError as exc:
+            return _ecra_painel(request, conn, despesa_texto=texto, erro_despesa=str(exc), status_code=422)
+        configuracao.definir_despesa_mensal(conn, cent)
+        aviso = _backup_depois_de_mudar(conn)
+        msg = (f"Despesa mensal de referência: {calc.formatar_euros(cent)}." if cent is not None
+               else "Despesa mensal de referência apagada.")
+        return _ecra_painel(request, conn, msg=msg, aviso_backup=aviso)
+    finally:
+        conn.close()
 
 
 def desligar() -> None:

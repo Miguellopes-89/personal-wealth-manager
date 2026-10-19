@@ -9,7 +9,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 2  # 2: registos_mensais.data_leitura
+SCHEMA_VERSION = 3  # 2: registos_mensais.data_leitura; 3: tabela configuracao
 
 CATEGORIAS = (
     "conta_corrente",
@@ -65,6 +65,13 @@ CREATE TABLE IF NOT EXISTS planos (
     tipo          TEXT    NOT NULL,
     data_inicio   TEXT    NOT NULL
 );
+
+-- Valores de configuração editáveis na app (ex.: despesa mensal de referência, em cêntimos).
+-- Sem CHECK na chave: uma chave nova não obriga a refazer a tabela; as chaves válidas vivem em configuracao.py.
+CREATE TABLE IF NOT EXISTS configuracao (
+    chave TEXT    PRIMARY KEY,
+    valor INTEGER NOT NULL
+) WITHOUT ROWID;
 """
 
 
@@ -101,6 +108,7 @@ def _migrar(conn: sqlite3.Connection) -> None:
     """Atualiza uma base criada por uma versão anterior do esquema, sem perder dados."""
     if "data_leitura" not in _colunas(conn, "registos_mensais"):  # versão 1 -> 2
         conn.execute(f"ALTER TABLE registos_mensais ADD COLUMN {_COLUNA_DATA_LEITURA}")
+    # 2 -> 3: a tabela configuracao é criada pelo CREATE TABLE IF NOT EXISTS do SCHEMA.
 
 
 def init_db(conn: sqlite3.Connection) -> None:

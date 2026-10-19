@@ -6,8 +6,8 @@ num único ecrã e vês logo o resultado (ganho do mês, avisos), sem passar por
 Os dados ficam na tua máquina, numa base de dados SQLite. Não há contas, nem serviços externos, nem CDN.
 
 > **Estado:** versão 1 completa: painel, check-in mensal, gestão de plataformas, cópia de segurança e restauro,
-> com o design final. Em uso desde outubro de 2026. Próximo: metas de poupança, cobertura do fundo de
-> liberdade e comparação com índices.
+> com o design final. Em uso desde outubro de 2026. Versão 2 em curso: cobertura do fundo de liberdade feita;
+> a seguir, metas de poupança e comparação com índices.
 
 ![Painel](docs/capturas/painel.png)
 
@@ -21,7 +21,8 @@ As capturas usam os dados fictícios da demonstração (ver abaixo).
 
 - **Painel** (`/`): património total, variação face ao mês anterior e ganho do mês; evolução do património
   por categoria, alocação (poupança, investimento, reforma), a lista das plataformas agrupada por categoria
-  (saldo, ganho, aporte real vs plano) e o progresso do Desafio das 52 semanas. Gráficos com Chart.js guardado
+  (saldo, ganho, aporte real vs plano), a cobertura do fundo de liberdade (quantos meses de despesas paga,
+  com a despesa mensal de referência editável no próprio painel) e o progresso do Desafio das 52 semanas. Gráficos com Chart.js guardado
   localmente.
 - **Check-in mensal** (`/checkin`): uma linha por plataforma, com o saldo do mês anterior só como
   referência e o aporte pré-preenchido pelo plano (no Desafio das 52 semanas, agrupado por mês com o detalhe
@@ -124,6 +125,7 @@ app/
   plataformas.py gestão das plataformas, sem web
   calc.py        cálculo do ganho e dos avisos
   planos.py      Desafio das 52 semanas e verificação do rendimento
+  configuracao.py valores editáveis na app (despesa mensal de referência)
   db.py          ligação, esquema e migrações (SQLite)
   backup.py      cópia de segurança em CSV
   restauro.py    restauro para uma base nova
