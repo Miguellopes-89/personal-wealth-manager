@@ -17,8 +17,9 @@ Os dados ficam na tua máquina, numa base de dados SQLite. Não há contas, nem 
   referência e o aporte pré-preenchido pelo plano. Grava tudo ou nada, e mostra o ganho do mês e os avisos
   logo a seguir. Regravar um mês atualiza-o, não duplica.
 - **Plataformas** (`/plataformas`): criar, editar, desativar e reativar (com o plano mensal ou o Desafio das
-  52 semanas). Desativar não apaga histórico: o painel conta a plataforma até ao seu último registo. Só se
-  apaga uma plataforma sem registos.
+  52 semanas). Só se desativa uma conta fechada: primeiro grava-se no check-in o saldo 0, com o levantamento
+  como aporte negativo (e o mesmo valor como aporte no destino). O histórico fica no painel. Só se apaga uma
+  plataforma sem registos.
 - **Ganho do mês** = saldo − saldo do mês anterior − aporte. Plataformas como contas correntes ou
   numerário (onde salários e transferências não são lucro) ficam só com saldo, sem ganho.
 - **Avisos**: ganho negativo e mês em falta.
