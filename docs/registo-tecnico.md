@@ -15,6 +15,44 @@ Versão atual do esquema da base: **4** (`SCHEMA_VERSION` em `app/db.py`).
 
 ---
 
+## Sessão 21/10/2026 — grafico-evolucao-linha-filtro-pwm
+Commit `edf0f1f` · 384 testes (+4)
+
+**Pedido:** gráfico da evolução em linha, com filtro "este ano" / "desde o início". Escolhido o meio-termo:
+linha do total com categorias opcionais e dois períodos, sem zoom nem intervalos à medida.
+
+**O que mudou**
+- O gráfico de barras empilhadas por categoria passa a **linha**. O património total é a linha principal
+  (com área preenchida); cada categoria é uma linha fina, **escondida por defeito**, que se liga clicando
+  na legenda. Tooltip mostra todos os valores visíveis do mês.
+- Botões **"Este ano"** e **"Desde o início"** (padrão: desde o início). O filtro corre no browser, sem novo
+  pedido ao servidor: os dados de todos os meses já vêm na página.
+- Por cima do gráfico: variação do período (primeiro → último mês visível) em euros e percentagem. Com um só
+  mês no período, explica que a variação aparece a partir do segundo.
+- `dashboard.dados_graficos` envia `total_cent` (soma das categorias por mês, cêntimos inteiros) e
+  `inicio_ano` (posição do primeiro mês do ano do **último mês com registos**, não do dia de hoje).
+
+**Ficheiros:** `app/dashboard.py`, `app/templates/dashboard.html`, `app/static/css/pwm.css`, `README.md`;
+testes em `test_dashboard.py`.
+
+**Decisões**
+- "Este ano" começa em janeiro do ano do painel, sem dezembro do ano anterior como ponto de partida: a variação
+  mede-se de janeiro ao último mês. Se se quiser o valor de fecho do ano anterior como base, é mudar `inicio_ano`
+  para uma posição antes.
+- A variação inclui aportes (é variação do património, não rendimento). O ganho continua no cartão do mês.
+- Os botões do filtro estão fora dos formulários com `data-avisar-sair`: mudar de período não dispara o aviso.
+
+**Verificado:** 384 testes; Chromium na cloud com base fictícia (`seed_demo` + 11 meses anteriores inventados,
+08-2025 a 09-2026): tipo linha, 14 meses em "Desde o início", 9 em "Este ano", botões trocam `aria-pressed`,
+variações iguais às calculadas em Python (+4.895,89 € / +24,7 %; +3.117,64 € / +14,4 %), categoria ligada
+mantém-se ao mudar de período, "Guardar e sair" sem pergunta depois de usar o filtro, sem erros de JavaScript,
+layout a 420 px de largura. **Por confirmar:** no Windows com a base real (só tem 10-2026: um ponto e a frase
+do mês único).
+
+**Esquema:** sem alterações (versão 4).
+
+---
+
 ## Sessão 21/10/2026 — aviso-sair-painel-plataformas-pwm
 Commit `a5eafd0` · 380 testes (+12)
 
