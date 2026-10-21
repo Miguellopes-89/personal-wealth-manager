@@ -39,7 +39,7 @@ def _plataforma(categoria="viagens"):
 
 
 def _form_plataforma(**extra):
-    dados = {"nome": "Nova", "categoria": "viagens", "titular": "Ana", "plano_mensal": "", "ordem": ""}
+    dados = {"nome": "Nova", "categoria": "viagens", "titular": "Ana", "plano_mensal": "", "posicao": ""}
     dados.update(extra)
     return dados
 

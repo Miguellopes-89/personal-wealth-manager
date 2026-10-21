@@ -53,9 +53,16 @@
       <input type="text" inputmode="decimal" name="plano_mensal" value="{{ form.plano_mensal or '' }}"{% if erros.plano_mensal %} class="erro"{% endif %}>
       {% if erros.plano_mensal %}<span class="msg-erro">{{ erros.plano_mensal }}</span>{% endif %}
     </label>
-    <label class="campo">Ordem no ecrã
-      <input type="text" inputmode="numeric" name="ordem" value="{{ form.ordem or '' }}"{% if erros.ordem %} class="erro"{% endif %}>
-      {% if erros.ordem %}<span class="msg-erro">{{ erros.ordem }}</span>{% endif %}
+    <label class="campo">Posição
+      <select name="posicao" id="campo-posicao"{% if erros.posicao %} class="erro"{% endif %}>
+        <option value=""{% if not form.posicao %} selected{% endif %}>No fim da categoria</option>
+        <option value="inicio"{% if form.posicao == 'inicio' %} selected{% endif %}>No início da categoria</option>
+        {% for o in opcoes_posicao %}{% if not editar or o.id != editar.id %}
+        <option value="depois:{{ o.id }}" data-categoria="{{ o.categoria }}"{% if form.posicao == 'depois:' ~ o.id %} selected{% endif %}>Depois de {{ o.nome }}</option>
+        {% endif %}{% endfor %}
+      </select>
+      {% if erros.posicao %}<span class="msg-erro">{{ erros.posicao }}</span>{% endif %}
+      <span class="sub">Ordem no check-in, no painel e nesta tabela. A lista mostra as plataformas ativas da categoria escolhida.</span>
     </label>
   </div>
   <p>
@@ -122,6 +129,27 @@
   </form>
   {% if erros_categorias.nova %}<span class="msg-erro">{{ erros_categorias.nova }}</span>{% endif %}
 </section>
+
+<script>
+  // "Posição": só as plataformas da categoria escolhida. Se a escolhida deixar de servir (mudou a categoria),
+  // volta a "No fim da categoria". Sem JavaScript, o servidor recusa uma posição de outra categoria.
+  (() => {
+    const categoria = document.querySelector('select[name="categoria"]');
+    const posicao = document.getElementById('campo-posicao');
+    if (!categoria || !posicao) return;
+    const filtrar = () => {
+      for (const o of posicao.options) {
+        if (!o.dataset.categoria) continue;
+        const fora = o.dataset.categoria !== categoria.value;
+        o.hidden = fora;
+        o.disabled = fora;
+      }
+      if (posicao.selectedOptions[0]?.disabled) posicao.value = '';
+    };
+    categoria.addEventListener('change', filtrar);
+    filtrar();
+  })();
+</script>
 
 {% if saltar_para %}
 <script>

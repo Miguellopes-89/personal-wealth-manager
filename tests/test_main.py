@@ -49,10 +49,13 @@ def test_post_da_propria_app_passa(monkeypatch, tmp_path):
 
 
 def test_valores_enormes_dao_erro_de_validacao_e_nao_500(monkeypatch, tmp_path):
-    """Um número gigante num campo de euros ou na ordem é recusado no formulário (antes rebentava no SQLite)."""
+    """Um número gigante num campo de euros é recusado no formulário (antes rebentava no SQLite).
+
+    A ordem deixou de ser escrita à mão (sessão 14): escolhe-se numa lista e é renumerada pela app.
+    """
     gigante = "999999999999999999999"
     with _cliente(monkeypatch, tmp_path) as cliente:
-        r = cliente.post("/plataformas", data={"nome": "G", "titular": "A", "categoria": "p2p", "ordem": gigante})
+        r = cliente.post("/plataformas", data={"nome": "G", "titular": "A", "categoria": "p2p", "plano_mensal": gigante})
         assert r.status_code == 422
         r = cliente.post("/configuracao/despesa-mensal", data={"despesa_mensal": gigante})
         assert r.status_code == 422

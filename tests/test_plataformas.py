@@ -19,7 +19,7 @@ def conn():
 
 def _form(**extra):
     base = {"nome": "Corretora", "categoria": "investimento", "titular": "Ana", "plano_mensal": "50,00",
-            "calcula_ganho": "1", "entra_alocacao": "1", "ordem": "3"}
+            "calcula_ganho": "1", "entra_alocacao": "1", "posicao": ""}
     base.update(extra)
     return {k: v for k, v in base.items() if v is not None}
 
@@ -51,7 +51,7 @@ def test_validar_converte_os_campos():
     assert v.ok
     d = v.dados
     assert (d.nome, d.categoria, d.titular, d.finalidade) == ("Corretora", "investimento", "Ana", "Fundo")
-    assert d.plano_mensal_cent == 5000 and d.ordem == 3
+    assert d.plano_mensal_cent == 5000 and d.posicao == plataformas.POSICAO_FIM
     assert d.calcula_ganho and d.entra_alocacao and d.desafio_inicio is None
 
 
@@ -62,7 +62,8 @@ def test_checkboxes_ausentes_ficam_desligadas():
 
 @pytest.mark.parametrize("campo, valor", [
     ("nome", "  "), ("titular", ""), ("categoria", "acoes"), ("plano_mensal", "1.234.56"),
-    ("plano_mensal", "-5"), ("ordem", "um"), ("ordem", "99999999999999999999"),
+    ("plano_mensal", "-5"), ("posicao", "meio"), ("posicao", "depois:abc"), ("posicao", "depois:"),
+    ("posicao", "depois:99999999999999999999"),
     ("plano_mensal", "999999999999999999999"),
 ])
 def test_validar_rejeita(campo, valor):
@@ -113,12 +114,6 @@ def test_atualizar_para_nome_de_outra_e_recusado(conn):
     b = _criar(conn, nome="B")
     with pytest.raises(ValueError):
         plataformas.atualizar(conn, b, plataformas.validar(_form(nome="A")).dados)
-
-
-def test_proxima_ordem(conn):
-    assert plataformas.proxima_ordem(conn) == 1
-    _criar(conn, ordem="7")
-    assert plataformas.proxima_ordem(conn) == 8
 
 
 # --- desativar, fechar, reativar, apagar ----------------------------------------
@@ -214,8 +209,8 @@ def test_apagar_so_sem_registos(conn):
 
 
 def test_listar_ativas_primeiro_com_contagens(conn):
-    a = _criar(conn, nome="A", ordem="1")
-    b = _criar(conn, nome="B", ordem="2")
+    a = _criar(conn, nome="A")
+    b = _criar(conn, nome="B")
     _reg(conn, b, "2026-09", 1)
     _reg(conn, b, "2026-10", 1)
     plataformas.desativar(conn, a)

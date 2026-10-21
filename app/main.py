@@ -279,11 +279,11 @@ def _ecra_plataformas(request: Request, conn, *, editar=None, form=None, erros=N
                 "nome": editar["nome"], "categoria": editar["categoria"], "titular": editar["titular"],
                 "finalidade": editar["finalidade"] or "", "plano_mensal": checkin.cent_para_texto(editar["plano_mensal_cent"]),
                 "calcula_ganho": "1" if editar["calcula_ganho"] else "", "entra_alocacao": "1" if editar["entra_alocacao"] else "",
-                "ordem": str(editar["ordem"]), "desafio": "1" if editar["desafio_inicio"] else "",
+                "posicao": plataformas.posicao_atual(conn, editar["id"]), "desafio": "1" if editar["desafio_inicio"] else "",
                 "desafio_inicio": editar["desafio_inicio"] or "",
             }
         else:
-            form = {"calcula_ganho": "1", "entra_alocacao": "1", "ordem": str(plataformas.proxima_ordem(conn)),
+            form = {"calcula_ganho": "1", "entra_alocacao": "1", "posicao": plataformas.POSICAO_FIM,
                     "plano_mensal": "0,00", "desafio_inicio": f"{date.today().year}-01-01"}
     lista_categorias = categorias.listar(conn)
     if saltar_para is None and erros:
@@ -291,12 +291,17 @@ def _ecra_plataformas(request: Request, conn, *, editar=None, form=None, erros=N
     contexto = {
         "lista": plataformas.listar(conn), "editar": editar, "form": form, "erros": erros or {},
         "msg": msg, "erro_geral": erro_geral, "aviso_backup": aviso_backup,
-        "categorias": lista_categorias, "rotulos": {c.codigo: c.nome for c in lista_categorias},
+        "categorias": lista_categorias, "opcoes_posicao": plataformas.opcoes_posicao(conn), "rotulos": {c.codigo: c.nome for c in lista_categorias},
         "erros_categorias": erros_categorias or {}, "nomes_categorias": nomes_categorias or {},
         "msg_categorias": msg_categorias, "saltar_para": saltar_para,
         "ultimo": plataformas.ultimo_saldo(conn, editar["id"]) if editar is not None else None,
     }
     return templates.TemplateResponse(request, "plataformas.html", contexto, status_code=status_code)
+
+
+def _campo_do_erro(exc: ValueError) -> str:
+    """Campo do formulário onde mostrar um erro de gravação: posição escolhida ou nome repetido."""
+    return "posicao" if isinstance(exc, plataformas.PosicaoInvalida) else "nome"
 
 
 def _form_texto(form) -> dict[str, str]:
@@ -324,7 +329,7 @@ async def plataformas_criar(request: Request):
         try:
             plataformas.criar(conn, v.dados)
         except ValueError as exc:
-            return _ecra_plataformas(request, conn, form=form, erros={"nome": str(exc)},
+            return _ecra_plataformas(request, conn, form=form, erros={_campo_do_erro(exc): str(exc)},
                                      erro_geral="Nada foi gravado.", status_code=422)
         aviso = _backup_depois_de_mudar(conn)
         return _ecra_plataformas(request, conn, msg=f"Plataforma {v.dados.nome!r} criada.", aviso_backup=aviso)
@@ -364,7 +369,7 @@ async def plataforma_atualizar(request: Request, plataforma_id: int):
         try:
             plataformas.atualizar(conn, plataforma_id, v.dados)
         except ValueError as exc:
-            return _ecra_plataformas(request, conn, editar=p, form=form, erros={"nome": str(exc)},
+            return _ecra_plataformas(request, conn, editar=p, form=form, erros={_campo_do_erro(exc): str(exc)},
                                      erro_geral="Nada foi gravado.", status_code=422)
         aviso = _backup_depois_de_mudar(conn)
         return _ecra_plataformas(request, conn, msg=f"Plataforma {v.dados.nome!r} atualizada.", aviso_backup=aviso)

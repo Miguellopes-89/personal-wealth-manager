@@ -10,6 +10,10 @@ Regras:
   Desativar nunca apaga histórico nem grava registos.
 - Só se apaga uma plataforma sem registos (serve para corrigir uma criada por engano).
 - Mudar a categoria ou o "calcula ganho" de uma plataforma muda também o passado no painel.
+- Posição (sessão 14): escolhe-se numa lista com as plataformas ativas da mesma categoria ("no início",
+  "depois de X", "no fim"). A coluna `ordem` continua a ser uma ordem global (o check-in e a tabela mostram
+  uma lista única), por isso a plataforma é posta no sítio escolhido e todas são renumeradas 10, 20, 30…,
+  sem mudar a posição relativa das outras. As inativas ficam fora da lista.
 """
 from __future__ import annotations
 
@@ -20,7 +24,14 @@ from datetime import date
 
 from app import calc, db, planos
 
-LIMITE_ORDEM = 1_000_000  # a ordem só arruma a lista; um inteiro enorme rebentava no SQLite (erro 500)
+POSICAO_FIM = ""  # no fim da categoria (por defeito numa plataforma nova ou que muda de categoria)
+POSICAO_INICIO = "inicio"
+PREFIXO_DEPOIS = "depois:"  # "depois:<id>" = logo a seguir a essa plataforma
+PASSO_ORDEM = 10
+
+
+class PosicaoInvalida(ValueError):
+    """A plataforma escolhida em "Posição" não serve (outra categoria, inativa, inexistente ou a própria)."""
 
 
 @dataclass(frozen=True)
@@ -34,7 +45,7 @@ class Dados:
     plano_mensal_cent: int
     calcula_ganho: bool
     entra_alocacao: bool
-    ordem: int
+    posicao: str  # POSICAO_FIM, POSICAO_INICIO ou "depois:<id>"
     desafio_inicio: date | None  # None = sem Desafio das 52 semanas
 
 
@@ -75,16 +86,9 @@ def validar(form: dict[str, str], categorias_validas: Iterable[str] | None = Non
             if plano < 0:
                 erros["plano_mensal"] = "O plano mensal não pode ser negativo"
 
-    ordem = 0
-    texto_ordem = (form.get("ordem") or "").strip()
-    if texto_ordem:
-        try:
-            ordem = int(texto_ordem)
-        except ValueError:
-            erros["ordem"] = "A ordem tem de ser um número inteiro"
-        else:
-            if abs(ordem) > LIMITE_ORDEM:
-                erros["ordem"] = f"A ordem tem de estar entre -{LIMITE_ORDEM} e {LIMITE_ORDEM}"
+    posicao = (form.get("posicao") or "").strip()
+    if _id_depois(posicao) is None and posicao not in (POSICAO_FIM, POSICAO_INICIO):
+        erros["posicao"] = "Escolhe a posição na lista"
 
     inicio = None
     if form.get("desafio"):
@@ -104,7 +108,7 @@ def validar(form: dict[str, str], categorias_validas: Iterable[str] | None = Non
             plano_mensal_cent=plano,
             calcula_ganho=bool(form.get("calcula_ganho")),
             entra_alocacao=bool(form.get("entra_alocacao")),
-            ordem=ordem,
+            posicao=posicao,
             desafio_inicio=inicio,
         )
     )
@@ -126,8 +130,82 @@ def obter(conn: sqlite3.Connection, plataforma_id: int) -> sqlite3.Row | None:
     return next((p for p in listar(conn) if p["id"] == plataforma_id), None)
 
 
-def proxima_ordem(conn: sqlite3.Connection) -> int:
-    return conn.execute("SELECT COALESCE(MAX(ordem), 0) + 1 FROM plataformas").fetchone()[0]
+def _id_depois(posicao: str) -> int | None:
+    """O id em "depois:<id>"; None se o texto não tiver essa forma."""
+    resto = posicao.removeprefix(PREFIXO_DEPOIS)
+    if resto == posicao or not resto.isdigit() or len(resto) > 18:
+        return None
+    return int(resto)
+
+
+def _ordem_global(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Todas as plataformas (ativas e inativas) pela ordem do check-in e do painel."""
+    return conn.execute("SELECT id, categoria, ativa FROM plataformas ORDER BY ordem, id").fetchall()
+
+
+def opcoes_posicao(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Plataformas ativas pela ordem do ecrã, para a lista "Posição" (o ecrã filtra pela categoria)."""
+    return conn.execute(
+        "SELECT id, nome, categoria FROM plataformas WHERE ativa = 1 ORDER BY ordem, id"
+    ).fetchall()
+
+
+def posicao_atual(conn: sqlite3.Connection, plataforma_id: int) -> str:
+    """Valor da lista "Posição" que descreve onde a plataforma está agora, dentro da sua categoria.
+
+    "depois:<id>" da plataforma ativa da mesma categoria que vem antes; "inicio" se é a primeira e há outras;
+    POSICAO_FIM se é a única ativa da categoria. Serve de valor inicial no formulário de edição.
+    """
+    todas = _ordem_global(conn)
+    propria = next((p for p in todas if p["id"] == plataforma_id), None)
+    if propria is None:
+        return POSICAO_FIM
+    anterior = None
+    outras = False
+    passou = False
+    for p in todas:
+        if p["id"] == plataforma_id:
+            passou = True
+            continue
+        if p["ativa"] and p["categoria"] == propria["categoria"]:
+            outras = True
+            if not passou:
+                anterior = p["id"]
+    if anterior is not None:
+        return f"{PREFIXO_DEPOIS}{anterior}"
+    return POSICAO_INICIO if outras else POSICAO_FIM
+
+
+def _posicionar(conn: sqlite3.Connection, plataforma_id: int, categoria: str, posicao: str) -> None:
+    """Põe a plataforma no sítio escolhido e renumera todas (10, 20, 30…). Corre dentro da transação de quem chama.
+
+    As outras plataformas mantêm a ordem relativa. "No início"/"no fim" contam só as ativas da categoria; se não
+    houver outras, a plataforma fica onde estava (ou no fim de tudo, se for nova).
+    """
+    linhas = {p["id"]: p for p in _ordem_global(conn)}  # dicionário mantém a ordem global
+    todas = list(linhas)
+    sitio_original = todas.index(plataforma_id)
+    todas.remove(plataforma_id)
+    membros = [i for i in todas if linhas[i]["ativa"] and linhas[i]["categoria"] == categoria]
+
+    alvo = _id_depois(posicao)
+    if alvo is not None:
+        if alvo not in membros:
+            raise PosicaoInvalida(
+                "A plataforma escolhida em Posição não é uma plataforma ativa desta categoria; escolhe outra posição"
+            )
+        indice = todas.index(alvo) + 1
+    elif posicao == POSICAO_INICIO and membros:
+        indice = todas.index(membros[0])
+    elif membros:  # no fim da categoria (ou "no início" sem outras: dá no mesmo)
+        indice = todas.index(membros[-1]) + 1
+    else:
+        indice = sitio_original
+    todas.insert(indice, plataforma_id)
+    conn.executemany(
+        "UPDATE plataformas SET ordem = ? WHERE id = ?",
+        [((n + 1) * PASSO_ORDEM, i) for n, i in enumerate(todas)],
+    )
 
 
 def _nome_repetido(conn: sqlite3.Connection, nome: str, exceto: int | None) -> bool:
@@ -146,37 +224,47 @@ def _gravar_desafio(conn: sqlite3.Connection, plataforma_id: int, inicio: date |
 
 def _valores(d: Dados) -> tuple:
     return (d.nome, d.categoria, d.titular, d.finalidade, d.plano_mensal_cent,
-            int(d.calcula_ganho), int(d.entra_alocacao), d.ordem)
+            int(d.calcula_ganho), int(d.entra_alocacao))
 
 
 def criar(conn: sqlite3.Connection, d: Dados) -> int:
-    """Cria uma plataforma ativa. ValueError se o nome já existir."""
+    """Cria uma plataforma ativa na posição escolhida. ValueError se o nome já existir; PosicaoInvalida se a
+    posição não servir (nada fica gravado)."""
     if _nome_repetido(conn, d.nome, None):
         raise ValueError(f"Já existe uma plataforma chamada {d.nome!r}")
     with conn:
         cur = conn.execute(
             """INSERT INTO plataformas (nome, categoria, titular, finalidade, plano_mensal_cent,
                                         calcula_ganho, entra_alocacao, ordem)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?,
+                       (SELECT COALESCE(MAX(ordem), 0) + 1 FROM plataformas))""",
             _valores(d),
         )
+        _posicionar(conn, cur.lastrowid, d.categoria, d.posicao)
         _gravar_desafio(conn, cur.lastrowid, d.desafio_inicio)
     return cur.lastrowid
 
 
 def atualizar(conn: sqlite3.Connection, plataforma_id: int, d: Dados) -> None:
-    """Atualiza os dados (não mexe no estado ativa/inativa nem nos registos)."""
+    """Atualiza os dados (não mexe no estado ativa/inativa nem nos registos).
+
+    Se a categoria não muda e a posição é a mesma que a plataforma já tem, ela não sai do sítio.
+    """
     if _nome_repetido(conn, d.nome, plataforma_id):
         raise ValueError(f"Já existe uma plataforma chamada {d.nome!r}")
     with conn:
-        cur = conn.execute(
+        antes = conn.execute("SELECT categoria FROM plataformas WHERE id = ?", (plataforma_id,)).fetchone()
+        if antes is None:
+            raise LookupError("Plataforma inexistente")
+        mover = antes["categoria"] != d.categoria or d.posicao != posicao_atual(conn, plataforma_id)
+        conn.execute(
             """UPDATE plataformas SET nome = ?, categoria = ?, titular = ?, finalidade = ?,
-                   plano_mensal_cent = ?, calcula_ganho = ?, entra_alocacao = ?, ordem = ?
+                   plano_mensal_cent = ?, calcula_ganho = ?, entra_alocacao = ?
                WHERE id = ?""",
             (*_valores(d), plataforma_id),
         )
-        if cur.rowcount == 0:
-            raise LookupError("Plataforma inexistente")
+        if mover:
+            _posicionar(conn, plataforma_id, d.categoria, d.posicao)
         _gravar_desafio(conn, plataforma_id, d.desafio_inicio)
 
 
