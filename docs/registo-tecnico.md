@@ -17,7 +17,7 @@ Versão atual do esquema da base: **5** (`SCHEMA_VERSION` em `app/db.py`).
 ---
 
 ## Sessão 21/10/2026 — categorias-editaveis-pwm
-Commits `07f14ca` (esquema) e seguinte (ecrã) · 425 testes (+38)
+Commits `07f14ca` (esquema) e `c27d067` (ecrã) · 425 testes (+38)
 
 **Pedido:** poder acrescentar categorias (ex.: uma futura conta de rendimento de um side hustle). Escolhida a
 opção A de três (A: lista editável numa tabela; B: texto livre com sugestões; C: acrescentar à lista fixa só
