@@ -68,6 +68,34 @@ class SerieCategoria:
 
 
 @dataclass(frozen=True)
+class Crescimento:
+    """De onde veio a variação do património de um mês face ao anterior (cêntimos).
+
+    As quatro partes somam sempre a variação (`total_cent`):
+    - aportes: aportes (e levantamentos) registados nas plataformas com ganho;
+    - liquidez: variação do saldo das plataformas sem ganho (contas à ordem, numerário...), por onde entram os
+      salários e saem as despesas e os próprios aportes;
+    - rendimento: soma dos ganhos do mês (juros, valorização; pode ser negativo);
+    - novas: saldo inicial de uma plataforma cujo primeiro registo é neste mês (não é poupança nem rendimento).
+    Os aportes saem das contas à ordem: "poupança" (aportes + liquidez) é o dinheiro novo que o casal pôs de lado.
+    """
+
+    mes: str
+    aportes_cent: int
+    liquidez_cent: int
+    rendimento_cent: int
+    novas_cent: int
+
+    @property
+    def poupanca_cent(self) -> int:
+        return self.aportes_cent + self.liquidez_cent
+
+    @property
+    def total_cent(self) -> int:
+        return self.aportes_cent + self.liquidez_cent + self.rendimento_cent + self.novas_cent
+
+
+@dataclass(frozen=True)
 class FatiaAlocacao:
     categoria: str
     rotulo: str
@@ -129,6 +157,7 @@ class Painel:
     desafios: tuple[ProgressoDesafio, ...]
     cobertura: Cobertura | None = None  # None se não há plataformas da categoria do fundo de liberdade
     categorias: tuple[categorias.Categoria, ...] = ()  # pela ordem do ecrã: nomes e cores (esquema v5)
+    crescimento: tuple[Crescimento | None, ...] = ()  # um por mês de `meses`; None no primeiro (não há anterior)
 
 
 def _meses_entre(primeiro: str, ultimo: str) -> list[str]:
@@ -217,6 +246,8 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
         for res in calc.calcular_serie(lista, bool(p["calcula_ganho"])):
             resultados[(p["id"], res.mes)] = res
 
+    crescimento = _crescimento(todas, registos, saldos, resultados, meses)
+
     cartoes: list[Cartao] = []
     for p in plataformas:
         pid = p["id"]
@@ -298,7 +329,38 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
         desafios=tuple(desafios),
         cobertura=cobertura,
         categorias=lista_categorias,
+        crescimento=crescimento,
     )
+
+
+def _crescimento(
+    todas: list[sqlite3.Row],
+    registos: dict[int, list[sqlite3.Row]],
+    saldos: dict[int, list[int | None]],
+    resultados: dict[tuple[int, str], calc.ResultadoMes],
+    meses: list[str],
+) -> tuple[Crescimento | None, ...]:
+    """Origem da variação de cada mês (ver `Crescimento`). Usa os mesmos saldos do gráfico da evolução, por isso
+    as partes somam exatamente a variação do total: uma plataforma não tocada num mês não muda (saldo do último
+    registo) e o ganho de vários meses aparece no mês em que volta a ser registada."""
+    resultado: list[Crescimento | None] = [None]
+    for i in range(1, len(meses)):
+        mes = meses[i]
+        aportes = liquidez = rendimento = novas = 0
+        for p in todas:
+            pid = p["id"]
+            antes, agora = saldos[pid][i - 1] or 0, saldos[pid][i] or 0
+            if registos[pid] and registos[pid][0]["mes"] == mes:  # primeiro registo desta plataforma
+                novas += agora - antes
+            elif p["calcula_ganho"]:
+                res = resultados.get((pid, mes))
+                if res is not None:
+                    aportes += res.aporte_cent
+                    rendimento += res.ganho_cent or 0
+            else:
+                liquidez += agora - antes
+        resultado.append(Crescimento(mes, aportes, liquidez, rendimento, novas))
+    return tuple(resultado)
 
 
 def _progresso_desafio(conn: sqlite3.Connection, pid: int, nome: str, inicio: date, hoje: date) -> ProgressoDesafio:
@@ -349,5 +411,15 @@ def dados_graficos(painel: Painel) -> dict:
         ],
         "alocacao": [
             {"categoria": f.categoria, "rotulo": f.rotulo, "valor_cent": f.valor_cent} for f in painel.alocacao
+        ],
+        # Um por mês (null no primeiro). O filtro soma os meses depois do primeiro do período, como a variação.
+        "crescimento": [
+            None if c is None else {
+                "aportes_cent": c.aportes_cent,
+                "liquidez_cent": c.liquidez_cent,
+                "rendimento_cent": c.rendimento_cent,
+                "novas_cent": c.novas_cent,
+            }
+            for c in painel.crescimento
         ],
     }
