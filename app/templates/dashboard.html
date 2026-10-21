@@ -131,8 +131,14 @@
 <section class="caixa">
   {% for d in painel.desafios %}
   <div><strong>Desafio das 52 semanas</strong> <span class="sub">em {{ d.plataforma }}, {{ d.ano }}</span></div>
-  <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="52" aria-valuenow="{{ d.semana }}"><div style="width: {{ (d.previsto_cent * 100 / d.total_cent)|round(1) }}%"></div></div>
-  <div class="sub">Semana {{ d.semana }} de 52: previsto pelo plano até hoje {{ d.previsto_cent|eur }} de {{ d.total_cent|eur }}. É o plano, não os depósitos feitos: a aplicação só guarda o aporte de cada mês.</div>
+  <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="{{ d.total_cent }}" aria-valuenow="{{ d.feito_cent }}"><div style="width: {{ (d.feito_cent * 100 / d.total_cent)|round(1) }}%"></div></div>
+  <div class="sub">Semana {{ d.semana }} de 52: previsto pelo plano até hoje {{ d.previsto_cent|eur }} de {{ d.total_cent|eur }}.</div>
+  <ul class="sub desafio-partes">
+    {% if d.anteriores_cent %}<li>Anteriores ao registo: {{ d.anteriores_cent|eur }} (no saldo inicial, não verificados um a um)</li>{% endif %}
+    <li>Confirmados no check-in: {{ d.confirmado_cent|eur }}</li>
+    {% if d.em_falta %}<li class="aviso">Em falta: {{ d.em_falta_cent|eur }} (semana{% if d.em_falta|length > 1 %}s{% endif %} {% for s in d.em_falta %}{{ s.numero }} · {{ s.data.strftime('%d/%m') }}{% if not loop.last %}, {% endif %}{% endfor %})</li>{% endif %}
+    {% if d.por_confirmar %}<li>Por confirmar no próximo check-in: {{ d.por_confirmar_cent|eur }} (semana{% if d.por_confirmar|length > 1 %}s{% endif %} {{ d.por_confirmar[0].numero }}{% if d.por_confirmar|length > 1 %} a {{ d.por_confirmar[-1].numero }}{% endif %})</li>{% endif %}
+  </ul>
   {% else %}
   <div class="sub">Sem Desafio das 52 semanas ativo.</div>
   {% endfor %}

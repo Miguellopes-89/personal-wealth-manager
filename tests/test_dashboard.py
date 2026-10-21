@@ -478,3 +478,82 @@ def test_despesa_de_outra_origem_e_recusada(cliente):
     r = cliente.post("/configuracao/despesa-mensal", data={"despesa_mensal": "1500"},
                      headers={"origin": "https://atacante.example"})
     assert r.status_code == 403
+
+
+# --- Desafio: depósitos confirmados (esquema v4) -----------------------------------------------
+
+def _soma_semanas(de, ate):
+    return 100 * sum(range(de, ate + 1))
+
+
+def _partes(p):
+    return p.anteriores_cent + p.confirmado_cent + p.em_falta_cent + p.por_confirmar_cent
+
+
+def test_progresso_divide_o_previsto_desde_o_saldo_inicial(conn):
+    b = _plat(conn, "P2P", categoria="p2p")
+    _desafio(conn, b)
+    _reg(conn, b, "2026-10", 500000, data="2026-10-13")  # saldo inicial: inclui as semanas 1 a 41
+    (p,) = dashboard.construir_painel(conn, HOJE).desafios
+    assert p.anteriores_cent == _soma_semanas(1, 41)
+    assert p.confirmado_cent == 0 and p.em_falta == ()
+    assert [s.numero for s in p.por_confirmar] == [42]  # 18/10: entra no check-in de novembro
+    assert _partes(p) == p.previsto_cent
+    assert p.feito_cent == _soma_semanas(1, 41)
+
+
+def test_progresso_com_um_domingo_desmarcado_fica_em_falta(conn):
+    b = _plat(conn, "P2P", categoria="p2p")
+    _desafio(conn, b)
+    _reg(conn, b, "2026-10", 500000, data="2026-10-13")
+    _reg(conn, b, "2026-11", 510000, aporte=8500, data="2026-11-01")
+    conn.executemany(
+        "INSERT INTO depositos_desafio VALUES (?, ?, ?, '2026-11')", [(b, "2026-10-18", 4200), (b, "2026-10-25", 4300)]
+    )
+    (p,) = dashboard.construir_painel(conn, date(2026, 11, 10)).desafios
+    assert p.confirmado_cent == 8500
+    assert [s.numero for s in p.em_falta] == [44]  # 1/11 coberto pela leitura e não confirmado
+    assert [s.numero for s in p.por_confirmar] == [45]  # 8/11, depois da última leitura
+    assert _partes(p) == p.previsto_cent == _soma_semanas(1, 45)
+
+
+def test_progresso_sem_leituras_datadas_fica_tudo_por_confirmar(conn):
+    b = _plat(conn, "P2P", categoria="p2p")
+    _desafio(conn, b)
+    _reg(conn, b, "2026-10", 500000)
+    (p,) = dashboard.construir_painel(conn, HOJE).desafios
+    assert p.anteriores_cent == 0 and p.em_falta == ()
+    assert p.por_confirmar_cent == p.previsto_cent
+
+
+def test_progresso_de_um_ano_novo_nao_conta_depositos_do_ano_anterior(conn):
+    b = _plat(conn, "P2P", categoria="p2p")
+    _desafio(conn, b)
+    _reg(conn, b, "2026-12", 500000, data="2026-12-01")
+    _reg(conn, b, "2027-01", 510000, aporte=0, data="2027-01-01")
+    conn.execute("INSERT INTO depositos_desafio VALUES (?, '2026-12-06', 4900, '2027-01')", (b,))
+    (p,) = dashboard.construir_painel(conn, date(2027, 1, 12)).desafios  # domingos 3/1 e 10/1
+    assert p.confirmado_cent == 0
+    assert [s.numero for s in p.por_confirmar] == [1, 2]
+
+
+def test_painel_mostra_as_partes_do_desafio(cliente, monkeypatch):
+    original = dashboard.construir_painel
+    monkeypatch.setattr(dashboard, "construir_painel", lambda conn, hoje=None: original(conn, date(2026, 11, 10)))
+    c = db.connect()
+    try:
+        b = _plat(c, "P2P", categoria="p2p")
+        _desafio(c, b)
+        _reg(c, b, "2026-10", 500000, data="2026-10-13")
+        _reg(c, b, "2026-11", 510000, aporte=8500, data="2026-11-01")
+        c.executemany(
+            "INSERT INTO depositos_desafio VALUES (?, ?, ?, '2026-11')", [(b, "2026-10-18", 4200), (b, "2026-10-25", 4300)]
+        )
+        c.commit()
+    finally:
+        c.close()
+    r = cliente.get("/")
+    assert "Anteriores ao registo: 861,00 €" in r.text
+    assert "Confirmados no check-in: 85,00 €" in r.text
+    assert "Em falta: 44,00 € (semana 44 · 01/11)" in r.text
+    assert "Por confirmar no próximo check-in: 45,00 € (semana 45)" in r.text

@@ -12,8 +12,10 @@ Regras:
 - O painel mostra o último mês com registos (`Painel.mes`); `desatualizado` diz se já passou o mês atual.
 - A cobertura do fundo de liberdade é o saldo da categoria `emergencia` no mês do painel a dividir pela
   despesa mensal de referência (`configuracao.py`); sem referência, o painel mostra só o saldo.
-- O "previsto" do Desafio das 52 semanas é o do plano (domingos até hoje), não o que foi depositado:
-  o modelo de dados só guarda o aporte do mês, não cada depósito semanal.
+- Desafio das 52 semanas (desde o esquema v4): o previsto pelo plano até hoje divide-se em quatro partes que
+  somam sempre o previsto: anteriores ao registo (domingos até à primeira leitura: estão no saldo inicial, não
+  foram verificados um a um), confirmados no check-in (`depositos_desafio`), em falta (domingos já cobertos
+  por uma leitura e não confirmados) e por confirmar (depois da última leitura: entram no próximo check-in).
 """
 from __future__ import annotations
 
@@ -93,6 +95,23 @@ class ProgressoDesafio:
     semana: int  # n-ésimo domingo do ano já passado (0 = ainda nenhum)
     previsto_cent: int  # soma do plano até hoje
     total_cent: int
+    anteriores_cent: int = 0  # domingos até à primeira leitura: no saldo inicial, não verificados
+    confirmado_cent: int = 0  # confirmados no check-in
+    em_falta: tuple[planos.Semana, ...] = ()  # cobertos por uma leitura e não confirmados
+    por_confirmar: tuple[planos.Semana, ...] = ()  # depois da última leitura
+
+    @property
+    def em_falta_cent(self) -> int:
+        return sum(s.valor_cent for s in self.em_falta)
+
+    @property
+    def por_confirmar_cent(self) -> int:
+        return sum(s.valor_cent for s in self.por_confirmar)
+
+    @property
+    def feito_cent(self) -> int:
+        """Anteriores ao registo + confirmados: o que conta como depositado na barra."""
+        return self.anteriores_cent + self.confirmado_cent
 
 
 @dataclass(frozen=True)
@@ -262,15 +281,14 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
         if c in por_categoria_alocacao
     )
 
-    # Desafio das 52 semanas: o previsto pelo plano até hoje (domingos do ano civil já passados)
+    # Desafio das 52 semanas: o previsto pelo plano até hoje (domingos do ano civil já passados), dividido
+    # entre anteriores ao registo, confirmados, em falta e por confirmar
     desafios: list[ProgressoDesafio] = []
     for p in plataformas:
         inicio = inicio_desafio.get(p["id"])
         if inicio is None or inicio > hoje:
             continue
-        sugestao = planos.sugerir_desafio(date(hoje.year - 1, 12, 31), hoje, inicio)
-        semana = sugestao.semanas[-1].numero if sugestao.semanas else 0
-        desafios.append(ProgressoDesafio(p["nome"], hoje.year, semana, sugestao.total_cent, TOTAL_DESAFIO_CENT))
+        desafios.append(_progresso_desafio(conn, p["id"], p["nome"], inicio, hoje))
 
     # Fundo de liberdade: mesma regra do património (inativas contam até ao último registo, que é 0)
     cobertura = None
@@ -289,6 +307,35 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
         alocacao=alocacao,
         desafios=tuple(desafios),
         cobertura=cobertura,
+    )
+
+
+def _progresso_desafio(conn: sqlite3.Connection, pid: int, nome: str, inicio: date, hoje: date) -> ProgressoDesafio:
+    sugestao = planos.sugerir_desafio(date(hoje.year - 1, 12, 31), hoje, inicio)
+    semana = sugestao.semanas[-1].numero if sugestao.semanas else 0
+    datas = [
+        d for r in conn.execute(
+            "SELECT data_leitura FROM registos_mensais WHERE plataforma_id = ? ORDER BY mes", (pid,)
+        ).fetchall()
+        if (d := checkin.ler_data(r["data_leitura"])) is not None
+    ]
+    primeira = datas[0] if datas else None
+    ultima = max(datas) if datas else None
+    feitos = checkin.confirmados(conn, pid)
+    anteriores, confirmado, em_falta, por_confirmar = 0, 0, [], []
+    for s in sugestao.semanas:
+        if s.data in feitos:
+            confirmado += s.valor_cent
+        elif primeira is not None and s.data <= primeira:
+            anteriores += s.valor_cent
+        elif ultima is not None and s.data <= ultima:
+            em_falta.append(s)
+        else:
+            por_confirmar.append(s)
+    return ProgressoDesafio(
+        nome, hoje.year, semana, sugestao.total_cent, TOTAL_DESAFIO_CENT,
+        anteriores_cent=anteriores, confirmado_cent=confirmado,
+        em_falta=tuple(em_falta), por_confirmar=tuple(por_confirmar),
     )
 
 

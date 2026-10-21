@@ -209,3 +209,7 @@ label.opcao { display: flex; gap: .5rem; align-items: center; font-size: .9rem; 
   .checkin td[data-rotulo]::before { content: attr(data-rotulo); display: block; font-size: .75rem; color: var(--secundario); }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+/* ---------- Desafio no painel ---------- */
+.desafio-partes { margin: .35rem 0 0; padding-left: 1.1rem; }
+.desafio-partes li { margin: .1rem 0; }
