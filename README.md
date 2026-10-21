@@ -78,7 +78,8 @@ scripts\pwm.bat
 ```
 
 Faz a cópia de segurança do estado anterior, arranca o servidor em `http://127.0.0.1:8000` e abre o browser.
-Para fechar, usa o botão **Guardar e sair** da aplicação.
+Para fechar, usa o botão **Guardar e sair** da aplicação. Faz a cópia de segurança mas não grava formulários:
+se houver valores escritos e por gravar (check-in, despesa mensal ou plataforma), pede confirmação antes de sair.
 
 A base de dados fica em `%LOCALAPPDATA%\pwm\pwm.db`. Variáveis de ambiente:
 

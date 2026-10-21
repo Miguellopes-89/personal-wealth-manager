@@ -15,6 +15,49 @@ Versão atual do esquema da base: **4** (`SCHEMA_VERSION` em `app/db.py`).
 
 ---
 
+## Sessão 21/10/2026 — aviso-sair-painel-plataformas-pwm
+Commit `a5eafd0` · 380 testes (+12)
+
+**Problema que motivou a mudança:** "Guardar e sair" faz a cópia de segurança e fecha a aplicação, mas não
+grava formulários. Só o check-in avisava; a despesa mensal do painel e o formulário de plataformas perdiam
+o que estava escrito sem aviso.
+
+**O que mudou**
+- Um só script em `base.html` (a seguir à barra lateral) trata do aviso em todos os ecrãs. Verifica os
+  formulários marcados com `data-avisar-sair`: check-in, despesa mensal do painel e formulário de plataforma
+  (criar e editar).
+- Cada campo compara-se com o valor que o servidor escreveu na página (`defaultValue`, `defaultChecked`,
+  e para listas a opção marcada por defeito, ou a primeira se nenhuma estiver). Escrever e repor o valor
+  original não avisa. Campos escondidos e botões não contam.
+- Um ecrã devolvido com erro (422) leva `data-por-gravar` no formulário e avisa sempre: os valores no ecrã
+  foram escritos mas nunca gravados. No check-in, `_contexto` passa `por_gravar` quando há erros por linha.
+  Antes, o check-in devolvido com erro não avisava.
+- O script próprio do check-in para o aviso saiu (com os dois ativos haveria duas confirmações seguidas).
+  O script das caixas do Desafio fica igual.
+
+**Ficheiros:** `app/templates/base.html`, `app/templates/checkin.html`, `app/templates/dashboard.html`,
+`app/templates/plataformas.html`, `app/main.py`; testes em `test_aviso_sair.py` (novo).
+
+**Decisões**
+- Marcar formulários com um atributo em vez de vigiar todos: o formulário "Abrir" do check-in (GET, mês e data)
+  e os botões desativar/reativar/apagar não gravam valores escritos, logo não devem avisar.
+- Comparar com os valores por defeito do HTML em vez de guardar uma cópia ao carregar a página: dá o mesmo
+  resultado e funciona para qualquer formulário marcado, sem código por ecrã.
+- Fora do âmbito: sair da página pelos links da barra lateral (Painel, Check-in, Plataformas) continua a
+  perder valores sem aviso. Resolve-se com `beforeunload`, que tem de ser desligado no envio do próprio
+  formulário; fica como ideia.
+
+**Verificado:** 380 testes. No Chromium (cloud, base do `seed_demo`), com `/sair` intercetado: 15 casos certos
+— sem alterações sai sem perguntar; despesa escrita, nome escrito, categoria mudada, caixa "entra na alocação"
+mudada, saldo escrito e caixa do Desafio desmarcada perguntam e ficam na página; despesa escrita e reposta,
+nova plataforma intacta (lista em "—") e só a data do topo do check-in mudada não perguntam; os três ecrãs
+devolvidos com erro perguntam.
+**Por confirmar:** no Windows, com a base real.
+
+**Esquema:** sem alterações (versão 4).
+
+---
+
 ## Sessão 21/10/2026 — registo-depositos-desafio-pwm
 Commits `9a6ce74`, `a851296`, `c51319d` · 368 testes (+44)
 
