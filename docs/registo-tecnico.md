@@ -16,6 +16,53 @@ Versão atual do esquema da base: **5** (`SCHEMA_VERSION` em `app/db.py`).
 
 ---
 
+## Sessão 21/10/2026 — origem-crescimento-patrimonio-pwm
+Commits `3cf2d33` (cálculo) e `f7db468` (ecrã) · 461 testes (+13; 448 antes)
+
+**Pedido:** mostrar de onde vem o crescimento do património: quanto vem dos aportes e quanto do rendimento.
+
+**Decisão de modelo:** "aportes + ganho" sozinho não explica a variação. Os aportes saem das contas à ordem
+(plataformas sem ganho): são transferências internas, e o salário que fica na conta (ou a despesa que sai dela)
+mexe no património sem ser aporte nem ganho. Por isso cada mês divide-se em quatro partes que **somam sempre a
+variação do total, ao cêntimo** (`dashboard.Crescimento`):
+- `aportes_cent`: aportes (e levantamentos) registados nas plataformas com ganho;
+- `liquidez_cent`: variação do saldo das plataformas sem ganho (contas à ordem, numerário, cripto);
+- `rendimento_cent`: soma dos ganhos do mês (pode ser negativo);
+- `novas_cent`: saldo do primeiro registo de uma plataforma registada depois do primeiro mês (uma conta que já
+  existia não passa por poupança).
+No ecrã, aportes + liquidez chamam-se **"Dinheiro novo"** (o que ficou de lado dos salários). Não se usou
+"Poupança" porque já é o nome de uma categoria.
+
+**O que mudou**
+- `app/dashboard.py`: `Crescimento`, `_crescimento` (usa os mesmos saldos do gráfico da evolução: uma plataforma
+  não tocada num mês não muda, e o aporte e o ganho de vários meses aparecem no mês em que volta a ser
+  registada), `Painel.crescimento` (um por mês, `None` no primeiro) e `dados_graficos()["crescimento"]`.
+- `app/templates/dashboard.html`, `app/static/css/pwm.css`: secção "De onde veio o crescimento" por baixo da
+  evolução, ligada aos mesmos botões "Este ano" / "Desde o início". Soma os meses depois do primeiro do período
+  (a mesma regra da variação do período, por isso os números batem). Totais à esquerda (dinheiro novo com o
+  detalhe aportes / contas sem ganho, rendimento, plataformas novas só se houver), barras empilhadas por mês à
+  direita com a variação no rodapé da tooltip. Percentagens "% do crescimento" só quando todas as partes vão no
+  mesmo sentido e o total é positivo (com rendimento negativo, uma parte passaria de 100 %). Com um só mês no
+  período mostra uma frase em vez das partes. Fora dos formulários com `data-avisar-sair`.
+- `README.md`: linha do painel.
+- Sem mudança de esquema (versão 5).
+
+**Testes:** `tests/test_crescimento.py` (13): separação das partes, dinheiro novo negativo, rendimento negativo,
+levantamento, plataformas novas (com e sem ganho), mês não tocado, conta fechada, soma igual à variação em
+dados aleatórios (8 plataformas, 22 meses), dados para o gráfico e página.
+
+**Verificado no Chromium** (cloud, `seed_demo` + um mês 12-2025 fictício + uma plataforma nova em 09-2026):
+valores no ecrã iguais aos de Python nos dois períodos (+2.669,24 €: dinheiro novo +957,00 €, rendimento
++1.212,24 €, plataformas novas +500,00 €); com rendimento negativo as percentagens desaparecem; base com um só
+mês mostra a frase; "Guardar e sair" não pergunta depois de usar o filtro; sem erros de JavaScript; sem scroll
+horizontal a 420 px e 1280 px. **Por confirmar:** no Windows com a base real (só tem 10-2026: deve aparecer a
+frase do mês único até ao check-in de novembro).
+
+**Limite conhecido:** um mês sem registo numa plataforma com ganho junta o aporte e o ganho de vários meses no
+mês seguinte (a barra desse mês fica maior). É o mesmo comportamento do aviso "mês em falta" do ganho.
+
+---
+
 ## Sessão 21/10/2026 — posicao-plataformas-por-lista-pwm
 Commit `2c01bd2` · 448 testes (+23: 22 novos e +1 líquido nos ajustes; 425 antes)
 

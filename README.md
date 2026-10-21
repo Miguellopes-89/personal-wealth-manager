@@ -20,7 +20,8 @@ As capturas usam os dados fictícios da demonstração (ver abaixo).
 ## O que já faz
 
 - **Painel** (`/`): património total, variação face ao mês anterior e ganho do mês; evolução do património
-  em linha (total, categorias na legenda, filtro "Este ano" / "Desde o início"), alocação (poupança, investimento, reforma), a lista das plataformas agrupada por categoria
+  em linha (total, categorias na legenda, filtro "Este ano" / "Desde o início"), de onde veio o crescimento no período (dinheiro novo vs rendimento,
+  com barras por mês), alocação (poupança, investimento, reforma), a lista das plataformas agrupada por categoria
   (saldo, ganho, aporte real vs plano), a cobertura do fundo de liberdade (quantos meses de despesas paga,
   com a despesa mensal de referência editável no próprio painel) e o progresso do Desafio das 52 semanas
   (confirmados, em falta e por confirmar). Gráficos com Chart.js guardado
