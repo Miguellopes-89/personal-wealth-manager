@@ -24,7 +24,8 @@ from app import backup, db
 # têm e continuam a restaurar-se (ficam NULL). Qualquer outra coluna em falta continua a ser erro.
 COLUNAS_OPCIONAIS = {"registos_mensais": ("data_leitura",)}
 # Tabelas acrescentadas em versões posteriores: uma cópia antiga sem o CSV restaura-se com a tabela vazia.
-TABELAS_OPCIONAIS = ("configuracao", "depositos_desafio")
+# `categorias` (v5): uma cópia antiga sem o CSV fica com as categorias de origem, as únicas que existiam até à v4.
+TABELAS_OPCIONAIS = ("categorias", "configuracao", "depositos_desafio")
 
 
 def ultima_copia(pasta_base: Path) -> Path:
@@ -102,6 +103,9 @@ def restaurar(pasta_copia: Path, destino: Path) -> dict[str, int]:
     try:
         db.init_db(conn)
         with conn:  # tudo numa transação
+            if (pasta_copia / "categorias.csv").is_file():
+                # A base nova nasce com as categorias de origem; a cópia traz as suas (com nomes e cores editados).
+                conn.execute("DELETE FROM categorias")
             for tabela in backup.TABELAS:
                 contagens[tabela] = _carregar_tabela(conn, tabela, pasta_copia / f"{tabela}.csv")
         if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":

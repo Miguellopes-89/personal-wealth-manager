@@ -49,7 +49,7 @@ def test_ida_e_volta_reproduz_exatamente_os_dados(origem, tmp_path):
 
     contagens = restauro.restaurar(copia, destino)
 
-    assert contagens == {"plataformas": 2, "registos_mensais": 3, "planos": 1, "configuracao": 1, "depositos_desafio": 0}
+    assert contagens == {"categorias": len(db.CATEGORIAS_BASE), "plataformas": 2, "registos_mensais": 3, "planos": 1, "configuracao": 1, "depositos_desafio": 0}
     nova = db.connect(destino)
     try:
         assert _tudo(nova) == _tudo(origem)  # inclui NULL, ';', aspas e aporte negativo

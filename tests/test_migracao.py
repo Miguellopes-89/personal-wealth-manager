@@ -1,6 +1,7 @@
 import csv
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -156,7 +157,7 @@ def test_base_v3_ganha_a_tabela_depositos_desafio_sem_perder_dados():
 
     db.init_db(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert conn.execute("SELECT COUNT(*) FROM depositos_desafio").fetchone()[0] == 0
     assert conn.execute("SELECT valor FROM configuracao").fetchone()[0] == 123400
     assert conn.execute("SELECT saldo_cent, data_leitura FROM registos_mensais").fetchone()[:] == (500000, "2026-10-13")
@@ -208,3 +209,129 @@ def test_restaura_depositos_desafio(conn, tmp_path):
         assert nova.execute("SELECT * FROM depositos_desafio").fetchall()[0][:] == (1, "2026-10-18", 4200, "2026-10")
     finally:
         nova.close()
+
+
+# --- Versão 4 -> 5: categorias numa tabela própria -------------------------------------------------------------
+
+ESQUEMA_V4 = (Path(__file__).parent / "esquema_v4.sql").read_text(encoding="utf-8")
+TABELAS_V4 = ("plataformas", "registos_mensais", "planos", "configuracao", "depositos_desafio")
+
+
+def _base_v4(caminho):
+    conn = db.connect(caminho)
+    conn.executescript(ESQUEMA_V4)
+    conn.executescript(
+        """
+        INSERT INTO plataformas (id, nome, categoria, titular, plano_mensal_cent, ordem) VALUES
+            (3, 'P2P Exemplo', 'p2p', 'Ana', 0, 1), (7, 'Fundo Exemplo', 'emergencia', 'Rui', 2500, 2);
+        INSERT INTO registos_mensais VALUES (3, '2026-09', 100000, 0, '2026-09-13'), (3, '2026-10', 104500, 4000, '2026-10-11'),
+                                            (7, '2026-10', 300000, 2500, NULL);
+        INSERT INTO planos (id, plataforma_id, tipo, data_inicio) VALUES (5, 3, 'desafio_52', '2026-01-01');
+        INSERT INTO configuracao VALUES ('despesa_mensal_cent', 150000);
+        INSERT INTO depositos_desafio VALUES (3, '2026-09-20', 3800, '2026-10'), (3, '2026-09-27', 3900, '2026-10');
+        PRAGMA user_version = 4;
+        """
+    )
+    conn.commit()
+    return conn
+
+
+def _conteudo(conn, tabelas=TABELAS_V4):
+    return {t: [tuple(r) for r in conn.execute(f"SELECT * FROM {t} ORDER BY 1, 2")] for t in tabelas}
+
+
+def _sql_plataformas(conn):
+    return conn.execute("SELECT sql FROM sqlite_master WHERE name = 'plataformas'").fetchone()[0]
+
+
+def test_base_v4_migra_para_v5_sem_perder_dados(tmp_path):
+    conn = _base_v4(tmp_path / "v4.db")
+    antes = _conteudo(conn)
+
+    db.init_db(conn)
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 5
+    assert _conteudo(conn) == antes  # mesmos ids, saldos, datas, plano, configuração e depósitos
+    assert "REFERENCES categorias(codigo)" in _sql_plataformas(conn)
+    assert "CHECK (categoria IN" not in _sql_plataformas(conn)
+    assert [tuple(r) for r in conn.execute("SELECT codigo, nome, cor FROM categorias ORDER BY ordem")] == list(db.CATEGORIAS_BASE)
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1  # volta a ficar ligada
+
+
+def test_depois_da_migracao_as_ligacoes_continuam_a_funcionar(tmp_path):
+    conn = _base_v4(tmp_path / "v4.db")
+    db.init_db(conn)
+    with pytest.raises(sqlite3.IntegrityError):  # categoria que não existe na tabela
+        conn.execute("INSERT INTO plataformas (nome, categoria, titular) VALUES ('X', 'nao_existe', 'Ana')")
+    with pytest.raises(sqlite3.IntegrityError):  # categoria em uso não se apaga
+        conn.execute("DELETE FROM categorias WHERE codigo = 'p2p'")
+    with pytest.raises(sqlite3.IntegrityError):  # plataforma com registos continua protegida
+        conn.execute("DELETE FROM plataformas WHERE id = 3")
+    conn.rollback()
+    conn.execute("INSERT INTO categorias VALUES ('nova', 'Nova', '#123456', 11)")
+    conn.execute("INSERT INTO plataformas (nome, categoria, titular) VALUES ('Y', 'nova', 'Rui')")
+    conn.commit()
+
+
+def test_migracao_v5_e_idempotente_e_nao_repoe_categorias_apagadas(tmp_path):
+    conn = _base_v4(tmp_path / "v4.db")
+    db.init_db(conn)
+    conn.execute("DELETE FROM categorias WHERE codigo = 'cripto'")  # sem plataformas: pode apagar-se
+    conn.execute("UPDATE categorias SET nome = 'Liberdade' WHERE codigo = 'emergencia'")
+    conn.commit()
+    depois = _conteudo(conn, TABELAS_V4 + ("categorias",))
+
+    db.init_db(conn)
+    db.init_db(conn)
+
+    assert _conteudo(conn, TABELAS_V4 + ("categorias",)) == depois
+
+
+def test_migracao_com_categoria_desconhecida_aborta_sem_estragar_nada(tmp_path):
+    # Uma base v1 não tinha o CHECK: uma categoria fora da lista faria a migração deixar uma ligação inválida.
+    caminho = tmp_path / "v1.db"
+    conn = db.connect(caminho)
+    conn.executescript(ESQUEMA_V1.replace("'p2p'", "'outra'"))
+    with pytest.raises(RuntimeError, match="versão 5"):
+        db.init_db(conn)
+    conn.close()
+
+    conn = db.connect(caminho)
+    assert conn.execute("SELECT categoria FROM plataformas").fetchall()[0][0] == "outra"
+    assert conn.execute("SELECT COUNT(*) FROM registos_mensais").fetchone()[0] == 1
+    assert "REFERENCES categorias" not in _sql_plataformas(conn)  # a troca foi desfeita
+    assert conn.execute("PRAGMA user_version").fetchone()[0] < 5
+
+
+def test_restaura_copia_v4_sem_categorias_csv(tmp_path):
+    conn = _base_v4(tmp_path / "v4.db")
+    db.init_db(conn)
+    copia = backup.exportar_csv(conn, tmp_path / "backup", agora=datetime(2026, 10, 21, 12, 0, 0))
+    (copia / "categorias.csv").unlink()  # como uma cópia feita antes da v5
+
+    destino = tmp_path / "restaurada.db"
+    contagens = restauro.restaurar(copia, destino)
+
+    assert contagens["categorias"] == 0 and contagens["plataformas"] == 2
+    nova = db.connect(destino)
+    assert nova.execute("SELECT COUNT(*) FROM categorias").fetchone()[0] == len(db.CATEGORIAS_BASE)
+
+
+def test_restaura_categorias_criadas_e_renomeadas(tmp_path):
+    conn = _base_v4(tmp_path / "v4.db")
+    db.init_db(conn)
+    conn.execute("INSERT INTO categorias VALUES ('rendimento_extra', 'Rendimento extra', '#123456', 11)")
+    conn.execute("UPDATE plataformas SET categoria = 'rendimento_extra' WHERE id = 7")
+    conn.execute("UPDATE categorias SET nome = 'P2P (empréstimos)' WHERE codigo = 'p2p'")
+    conn.execute("DELETE FROM categorias WHERE codigo = 'cripto'")
+    conn.commit()
+    copia = backup.exportar_csv(conn, tmp_path / "backup", agora=datetime(2026, 10, 21, 12, 0, 0))
+
+    destino = tmp_path / "restaurada.db"
+    restauro.restaurar(copia, destino)
+
+    nova = db.connect(destino)
+    tabelas = TABELAS_V4 + ("categorias",)
+    assert _conteudo(nova, tabelas) == _conteudo(conn, tabelas)
