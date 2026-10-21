@@ -9,7 +9,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 3  # 2: registos_mensais.data_leitura; 3: tabela configuracao
+SCHEMA_VERSION = 4  # 2: registos_mensais.data_leitura; 3: tabela configuracao; 4: tabela depositos_desafio
 
 CATEGORIAS = (
     "conta_corrente",
@@ -72,6 +72,20 @@ CREATE TABLE IF NOT EXISTS configuracao (
     chave TEXT    PRIMARY KEY,
     valor INTEGER NOT NULL
 ) WITHOUT ROWID;
+
+-- Depósitos do Desafio das 52 semanas confirmados no check-in: um por domingo e plataforma.
+-- `mes` é o check-in (registo mensal) em cujo aporte o depósito entrou; regravar esse mês substitui-os.
+-- Um domingo do plano sem linha aqui está "em aberto": volta a aparecer no check-in seguinte.
+CREATE TABLE IF NOT EXISTS depositos_desafio (
+    plataforma_id INTEGER NOT NULL,
+    domingo       TEXT    NOT NULL CHECK (
+        COALESCE(date(domingo) = domingo, 0) AND strftime('%w', domingo) = '0'
+    ),
+    valor_cent    INTEGER NOT NULL CHECK (valor_cent > 0),
+    mes           TEXT    NOT NULL,
+    PRIMARY KEY (plataforma_id, domingo),
+    FOREIGN KEY (plataforma_id, mes) REFERENCES registos_mensais(plataforma_id, mes) ON DELETE CASCADE
+) WITHOUT ROWID;
 """
 
 
@@ -111,7 +125,8 @@ def _migrar(conn: sqlite3.Connection) -> None:
     """Atualiza uma base criada por uma versão anterior do esquema, sem perder dados."""
     if "data_leitura" not in _colunas(conn, "registos_mensais"):  # versão 1 -> 2
         conn.execute(f"ALTER TABLE registos_mensais ADD COLUMN {_COLUNA_DATA_LEITURA}")
-    # 2 -> 3: a tabela configuracao é criada pelo CREATE TABLE IF NOT EXISTS do SCHEMA.
+    # 2 -> 3 e 3 -> 4: as tabelas configuracao e depositos_desafio são criadas pelo CREATE TABLE IF NOT EXISTS
+    # do SCHEMA; uma base antiga fica com elas vazias.
 
 
 def init_db(conn: sqlite3.Connection) -> None:

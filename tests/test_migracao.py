@@ -53,7 +53,7 @@ def test_base_v2_ganha_a_tabela_configuracao_sem_perder_dados():
 
     db.init_db(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert conn.execute("SELECT COUNT(*) FROM configuracao").fetchone()[0] == 0
     assert conn.execute("SELECT saldo_cent, data_leitura FROM registos_mensais").fetchone()[:] == (500000, "2026-10-13")
     conn.close()
@@ -143,3 +143,68 @@ def test_coluna_obrigatoria_em_falta_continua_a_falhar(copia, tmp_path):
     with pytest.raises(ValueError, match="colunas"):
         restauro.restaurar(copia, destino)
     assert not destino.exists()
+
+
+def test_base_v3_ganha_a_tabela_depositos_desafio_sem_perder_dados():
+    conn = db.connect(":memory:")
+    conn.executescript(ESQUEMA_V1)
+    conn.execute("ALTER TABLE registos_mensais ADD COLUMN data_leitura TEXT")
+    conn.execute("UPDATE registos_mensais SET data_leitura = '2026-10-13'")
+    conn.execute("CREATE TABLE configuracao (chave TEXT PRIMARY KEY, valor INTEGER NOT NULL) WITHOUT ROWID")
+    conn.execute("INSERT INTO configuracao VALUES ('despesa_mensal_cent', 123400)")
+    conn.execute("PRAGMA user_version = 3")
+
+    db.init_db(conn)
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert conn.execute("SELECT COUNT(*) FROM depositos_desafio").fetchone()[0] == 0
+    assert conn.execute("SELECT valor FROM configuracao").fetchone()[0] == 123400
+    assert conn.execute("SELECT saldo_cent, data_leitura FROM registos_mensais").fetchone()[:] == (500000, "2026-10-13")
+    conn.close()
+
+
+@pytest.mark.parametrize("domingo", ["2026-10-18", "2027-01-03"])
+def test_deposito_aceita_domingos(conn, domingo):
+    _inserir(conn, "2026-10-13")
+    conn.execute("INSERT INTO depositos_desafio VALUES (1, ?, 4200, '2026-10')", (domingo,))
+
+
+@pytest.mark.parametrize("mau", ["2026-10-17", "2026-02-29", "18/10/2026", "2026-10-18 00:00", ""])
+def test_deposito_recusa_datas_que_nao_sao_domingos(conn, mau):
+    _inserir(conn, "2026-10-13")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO depositos_desafio VALUES (1, ?, 4200, '2026-10')", (mau,))
+
+
+def test_deposito_exige_registo_do_mes_e_valor_positivo(conn):
+    with pytest.raises(sqlite3.IntegrityError):  # sem registo de 2026-10
+        conn.execute("INSERT INTO depositos_desafio VALUES (1, '2026-10-18', 4200, '2026-10')")
+    _inserir(conn, "2026-10-13")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO depositos_desafio VALUES (1, '2026-10-18', 0, '2026-10')")
+
+
+def test_restaura_copia_sem_depositos_desafio(copia, tmp_path):
+    (copia / "depositos_desafio.csv").unlink()  # como as cópias feitas na versão 3
+    destino = tmp_path / "restaurada.db"
+
+    contagens = restauro.restaurar(copia, destino)
+
+    assert contagens["depositos_desafio"] == 0
+    assert contagens["registos_mensais"] == 1
+
+
+def test_restaura_depositos_desafio(conn, tmp_path):
+    _inserir(conn, "2026-10-13")
+    conn.execute("INSERT INTO depositos_desafio VALUES (1, '2026-10-18', 4200, '2026-10')")
+    conn.commit()
+    pasta = backup.exportar_csv(conn, tmp_path / "backup", agora=datetime(2026, 10, 21, 9, 0, 0))
+    destino = tmp_path / "restaurada.db"
+
+    restauro.restaurar(pasta, destino)
+
+    nova = db.connect(destino)
+    try:
+        assert nova.execute("SELECT * FROM depositos_desafio").fetchall()[0][:] == (1, "2026-10-18", 4200, "2026-10")
+    finally:
+        nova.close()

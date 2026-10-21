@@ -24,7 +24,7 @@ from app import backup, db
 # têm e continuam a restaurar-se (ficam NULL). Qualquer outra coluna em falta continua a ser erro.
 COLUNAS_OPCIONAIS = {"registos_mensais": ("data_leitura",)}
 # Tabelas acrescentadas em versões posteriores: uma cópia antiga sem o CSV restaura-se com a tabela vazia.
-TABELAS_OPCIONAIS = ("configuracao",)
+TABELAS_OPCIONAIS = ("configuracao", "depositos_desafio")
 
 
 def ultima_copia(pasta_base: Path) -> Path:
