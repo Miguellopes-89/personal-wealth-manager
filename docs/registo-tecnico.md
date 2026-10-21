@@ -16,6 +16,44 @@ Versão atual do esquema da base: **5** (`SCHEMA_VERSION` em `app/db.py`).
 
 ---
 
+## Sessão 21/10/2026 — posicao-plataformas-por-lista-pwm
+Commit `2c01bd2` · 448 testes (+23: 22 novos e +1 líquido nos ajustes; 425 antes)
+
+**Pedido do dono:** escolher a "Ordem no ecrã" numa lista com a ordem atual, em vez de escrever um número.
+
+**Decisão de desenho:** a lista "Posição" mostra só as plataformas **ativas da mesma categoria** ("No início da
+categoria", "Depois de X", "No fim da categoria"), porque o painel agrupa por categoria. Mas a coluna `ordem`
+continua **global**: o check-in e a tabela de `/plataformas` mostram uma lista única, e uma numeração por
+categoria (1, 2, 3 em cada uma) intercalaria categorias diferentes no check-in. Por isso, ao gravar, a plataforma
+é posta no sítio escolhido da ordem global e todas são renumeradas 10, 20, 30…, sem mudar a ordem relativa das
+outras. As inativas ficam fora da lista (o check-in não as mostra).
+
+**O que mudou** (`app/plataformas.py`, `app/main.py`, `app/templates/plataformas.html`)
+- `Dados.ordem` (int) passa a `Dados.posicao` (texto): `""` (fim), `"inicio"` ou `"depois:<id>"`. Saíram
+  `LIMITE_ORDEM` e `proxima_ordem`; o campo `ordem` do formulário é ignorado.
+- `posicao_atual(conn, id)`: valor inicial no formulário de edição. `opcoes_posicao(conn)`: ativas pela ordem.
+- `_posicionar` corre dentro da transação de `criar`/`atualizar`. Uma posição de outra categoria, inativa,
+  inexistente ou a própria levanta `PosicaoInvalida` (subclasse de `ValueError`): nada é gravado e a rota
+  mostra o erro no campo "Posição" (`_campo_do_erro` em `main.py`).
+- Regras: gravar com a posição que já tinha não move a plataforma (mesmo que esteja intercalada com outra
+  categoria); mudar de categoria põe-na no fim da nova; "início"/"fim" numa categoria sem outras ativas deixa-a
+  onde estava (ou no fim de tudo, se for nova).
+- Ecrã: um script esconde as opções de outras categorias e, se a escolhida deixar de servir ao mudar de
+  categoria, volta a "No fim da categoria". Sem JavaScript, o servidor recusa.
+- A primeira gravação depois do pull renumera a base real (10, 20, 30…) mantendo a ordem que se vê hoje; cria
+  uma cópia de segurança nova, como qualquer gravação. Sem mudança de esquema.
+
+**Testes:** `tests/test_posicao.py` (22: criar, editar, mudar de categoria, posições recusadas sem gravar nada,
+inativas, check-in, ecrã) e ajustes ao campo antigo em `test_plataformas.py`, `test_main.py`, `test_aviso_sair.py`.
+
+**Verificado no Chromium** (cloud, base do `seed_demo`, `/sair` intercetado): a editar "Corretora ETF B" a lista
+mostra só "Depois de Corretora ETF A" e vem nela escolhida; sem alterações o "Guardar e sair" não pergunta; ao
+mudar a categoria para Reforma aparecem só as duas PPR, a posição volta ao fim e o "Guardar e sair" pergunta;
+"No início" gravado põe a ETF B antes da ETF A na tabela e no check-in; sem erros de JavaScript; sem scroll
+horizontal a 420 px e 1280 px. **Por confirmar:** no Windows com a base real.
+
+---
+
 ## Sessão 21/10/2026 — categorias-editaveis-pwm
 Commits `07f14ca` (esquema) e `c27d067` (ecrã) · 425 testes (+38)
 
