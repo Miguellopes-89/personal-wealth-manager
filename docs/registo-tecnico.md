@@ -15,6 +15,28 @@ Versão atual do esquema da base: **4** (`SCHEMA_VERSION` em `app/db.py`).
 
 ---
 
+## Sessão 21/10/2026 — editar-plataforma-salta-formulario-pwm
+387 testes (+3)
+
+**Problema relatado:** em `/plataformas`, carregar em "Editar" parecia não fazer nada. Na verdade o endereço
+mudava para `/plataformas/<id>` e o formulário de edição abria, mas fica **por baixo da tabela**: com 12
+plataformas está fora do ecrã e a página não se mexia. O servidor estava certo (verificado: as 11
+plataformas da demo abertas em edição e gravadas sem alterações deixam a base igual).
+
+**O que mudou** (`app/templates/plataformas.html`, `app/static/css/pwm.css`)
+- O link "Editar" passa a `/plataformas/<id>#formulario` e o título do formulário tem `id="formulario"`:
+  o browser salta logo para lá, sem JavaScript.
+- A linha da plataforma em edição fica destacada na tabela (classe `a-editar`).
+- Ecrã devolvido com erro num campo (o endereço do POST não leva âncora): um script curto faz
+  `scrollIntoView` do formulário, para o erro não ficar escondido.
+- Sem mudança de esquema.
+
+**Testes:** `tests/test_plataformas.py` (âncora no link, linha destacada só na plataforma em edição,
+salto no ecrã com erro). Os testes não executam JavaScript: o salto no browser está **por confirmar** no ecrã
+(nesta sessão não havia Chromium na cloud).
+
+---
+
 ## Sessão 21/10/2026 — grafico-evolucao-linha-filtro-pwm
 Commit `edf0f1f` · 384 testes (+4)
 

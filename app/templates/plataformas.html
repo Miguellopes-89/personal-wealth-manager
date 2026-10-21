@@ -12,13 +12,13 @@
   <thead><tr><th>Plataforma</th><th>Categoria</th><th class="num">Plano mensal</th><th>Ganho · Alocação</th><th>Registos</th><th></th></tr></thead>
   <tbody>
   {% for p in lista %}
-    <tr class="{{ '' if p.ativa else 'inativa' }}">
+    <tr class="{{ '' if p.ativa else 'inativa' }}{% if editar and p.id == editar.id %} a-editar{% endif %}">
       <td>{{ p.nome }}<div class="sub">{{ p.titular }}{% if p.finalidade %} · {{ p.finalidade }}{% endif %}{% if not p.ativa %} · inativa{% endif %}</div></td>
       <td>{{ dict(categorias).get(p.categoria, p.categoria) }}</td>
       <td class="num">{% if p.desafio_inicio %}Desafio 52 sem.{% elif p.plano_mensal_cent %}{{ p.plano_mensal_cent|eur }}{% else %}—{% endif %}</td>
       <td>{{ 'sim' if p.calcula_ganho else 'não' }} · {{ 'sim' if p.entra_alocacao else 'não' }}</td>
       <td>{{ p.n_registos }}{% if p.ultimo_mes %} <span class="sub">(último {{ p.ultimo_mes|mes }})</span>{% endif %}</td>
-      <td><a href="/plataformas/{{ p.id }}">Editar</a></td>
+      <td><a href="/plataformas/{{ p.id }}#formulario">Editar</a></td>
     </tr>
   {% else %}
     <tr><td colspan="6" class="sub">Ainda não há plataformas.</td></tr>
@@ -27,7 +27,7 @@
 </table>
 </div>
 
-<h2>{% if editar %}Editar {{ editar.nome }}{% else %}Nova plataforma{% endif %}</h2>
+<h2 id="formulario">{% if editar %}Editar {{ editar.nome }}{% else %}Nova plataforma{% endif %}</h2>
 <form class="caixa formulario" method="post" action="{% if editar %}/plataformas/{{ editar.id }}{% else %}/plataformas{% endif %}" data-avisar-sair{% if erros %} data-por-gravar{% endif %}>
   <div class="grelha">
     <label class="campo">Nome
@@ -95,5 +95,11 @@
   </form>
   {% endif %}
 </div>
+{% endif %}
+{% if erros %}
+<script>
+  // Ecrã devolvido com erros num campo: o endereço não leva #formulario, por isso salta-se para lá.
+  document.getElementById("formulario").scrollIntoView();
+</script>
 {% endif %}
 {% endblock %}

@@ -286,3 +286,32 @@ def test_alteracao_faz_copia_de_seguranca(cliente, monkeypatch, tmp_path):
 def test_ecra_recusa_post_de_outra_origem(cliente):
     r = cliente.post("/plataformas", data=_form(), headers={"origin": "https://atacante.example"})
     assert r.status_code == 403
+
+
+def test_link_editar_salta_para_o_formulario(cliente):
+    # Com muitas plataformas o formulário fica por baixo da tabela: sem a âncora, "Editar" parecia não fazer nada.
+    cliente.post("/plataformas", data=_form())
+    pid = db.connect().execute("SELECT id FROM plataformas").fetchone()[0]
+    lista = cliente.get("/plataformas").text
+    assert f'href="/plataformas/{pid}#formulario"' in lista
+    assert 'id="formulario"' in lista
+    assert "a-editar" not in lista  # nada em edição
+    assert "scrollIntoView" not in lista
+
+
+def test_editar_destaca_a_linha_da_plataforma(cliente):
+    cliente.post("/plataformas", data=_form())
+    cliente.post("/plataformas", data=_form(nome="Outra"))
+    pid = db.connect().execute("SELECT id FROM plataformas WHERE nome = 'Outra'").fetchone()[0]
+    r = cliente.get(f"/plataformas/{pid}").text
+    assert r.count("a-editar") == 1
+    linha = r[r.index("a-editar"):]
+    assert linha.index("Outra") < linha.index("</tr>")
+
+
+def test_erro_num_campo_salta_para_o_formulario(cliente):
+    cliente.post("/plataformas", data=_form())
+    pid = db.connect().execute("SELECT id FROM plataformas").fetchone()[0]
+    r = cliente.post(f"/plataformas/{pid}", data=_form(titular=""))
+    assert r.status_code == 422
+    assert 'getElementById("formulario").scrollIntoView()' in r.text

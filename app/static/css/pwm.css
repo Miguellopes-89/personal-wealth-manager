@@ -179,6 +179,8 @@ label.domingo .aviso { display: inline; margin-left: .3rem; }
 
 /* ---------- Plataformas ---------- */
 tr.inativa td { color: #8f98a5; }
+tr.a-editar td { background: #e6f0f1; }
+#formulario { scroll-margin-top: 16px; }
 .grelha { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .9rem 1.1rem; }
 label.campo { display: flex; flex-direction: column; gap: .3rem; font-size: .9rem; font-weight: 500; }
 label.opcao { display: flex; gap: .5rem; align-items: center; font-size: .9rem; margin: .45rem 0; flex-wrap: wrap; }
