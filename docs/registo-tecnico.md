@@ -170,6 +170,8 @@ A última cópia anterior (feita com a versão antiga) não tinha esse ficheiro,
 e é criada uma cópia nova, **mesmo sem nenhum saldo alterado**. Isto acontece uma única vez; as cópias
 seguintes sem alterações voltam a reutilizar a última.
 Verificado: simulação com uma cópia sem `configuracao.csv` cria cópia nova; uma terceira exportação sem
-alterações devolve a mesma pasta. **Por confirmar** com os ficheiros reais: que a cópia de 20/10 foi a
-primeira depois do `git pull` desta versão, e se nesse dia também foi gravada a despesa mensal ou outro
-valor (o que, por si só, também justificaria uma cópia nova).
+alterações devolve a mesma pasta. Bate com o histórico do projeto: até 20/10 o backup devolvia sempre a
+cópia de 15/10; a 20/10 o código foi atualizado para `0e71688` (esquema v3) e a despesa mensal ainda não
+estava definida. **Por confirmar** com os ficheiros reais: a cópia de 20/10 deve ter um `configuracao.csv`
+só com o cabeçalho e os outros três CSV iguais aos da cópia de 15/10. Se algum CSV diferir, houve também
+uma alteração de dados nesse período.
