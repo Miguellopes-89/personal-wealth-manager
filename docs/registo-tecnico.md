@@ -4,13 +4,69 @@ Histórico das alterações relevantes ao código, uma entrada por commit (ou po
 Serve para quem lê o repositório sem ter estado na sessão perceber o que mudou e porquê.
 O que não foi verificado está marcado como "por confirmar".
 
-Versão atual do esquema da base: **3** (`SCHEMA_VERSION` em `app/db.py`).
+Versão atual do esquema da base: **4** (`SCHEMA_VERSION` em `app/db.py`).
 
 | Versão | Mudança | Migração |
 |---|---|---|
 | 1 | Tabelas `plataformas`, `registos_mensais`, `planos` | — |
 | 2 | Coluna `registos_mensais.data_leitura` (AAAA-MM-DD, pode ser NULL) | `ALTER TABLE` em `_migrar` |
 | 3 | Tabela `configuracao (chave TEXT PK, valor INTEGER)` | `CREATE TABLE IF NOT EXISTS` no arranque |
+| 4 | Tabela `depositos_desafio (plataforma_id, domingo, valor_cent, mes)` | `CREATE TABLE IF NOT EXISTS` no arranque |
+
+---
+
+## Sessão 21/10/2026 — registo-depositos-desafio-pwm
+Commits `9a6ce74`, `a851296`, `c51319d` · 368 testes (+44)
+
+**Problema que motivou a mudança:** a sugestão do aporte da Bondora somava os domingos entre a leitura anterior
+e a atual. Um depósito que ainda não estivesse no saldo no dia da leitura (ex.: domingo 1/11 com leitura a 1/11)
+e fosse retirado do aporte nunca mais era sugerido: a leitura seguinte começava depois desse domingo, e quando
+o dinheiro entrasse contava como **ganho**. O painel também só mostrava o plano, não o que foi depositado.
+
+**O que mudou**
+- `9a6ce74` — esquema v4: tabela `depositos_desafio` (um domingo confirmado por plataforma, com o valor e o mês
+  do check-in em que entrou). `domingo` tem de ser uma data válida e um domingo; FK composta para
+  `registos_mensais(plataforma_id, mes)`. Entra em `backup.TABELAS` e em `restauro.TABELAS_OPCIONAIS`.
+- `a851296` — check-in: uma caixa por domingo em aberto (marcadas por defeito; num mês já gravado, marcadas só
+  as confirmadas). Marcar/desmarcar soma/tira o valor ao aporte (JavaScript; o aporte continua editável).
+  Os marcados ficam em `depositos_desafio`; regravar o mês substitui-os. Um desmarcado volta no check-in
+  seguinte com "em atraso". Aviso depois de gravar se o aporte não bater com a soma das caixas.
+  "Guardar e sair" também avisa com caixas alteradas. Demo (`seed_demo`) com os depósitos confirmados.
+- `c51319d` — painel: o previsto do ano até hoje divide-se em anteriores ao registo, confirmados, em falta
+  (com semana e data) e por confirmar no próximo check-in; as quatro partes somam sempre o previsto.
+
+**Ficheiros:** `app/db.py`, `app/backup.py`, `app/restauro.py`, `app/planos.py` (`Semana.em_atraso`,
+`sugerir_desafio(excluir=, atraso_ate=)`), `app/checkin.py` (`domingos_em_aberto`, `confirmados`,
+`_gravar_depositos`, `Entrada.domingos`, `Linha.domingos_marcados`), `app/main.py`, `app/dashboard.py`,
+`app/templates/checkin.html`, `app/templates/dashboard.html`, `app/static/css/pwm.css`, `scripts/seed_demo.py`,
+`README.md`; testes em `test_depositos_desafio.py` (novo), `test_migracao.py`, `test_restauro.py`,
+`test_checkin_plano.py`, `test_main_plano.py`, `test_dashboard.py`, `test_seed_demo.py`.
+
+**Decisões**
+- Domingos em aberto = domingos do plano **depois da primeira leitura datada** da plataforma e até à leitura
+  atual, menos os confirmados noutros meses. Os anteriores à primeira leitura estão no saldo inicial: não se
+  pedem nem se dão como verificados ("anteriores ao registo" no painel).
+- O formulário manda um campo escondido `desafio_<id>` quando a linha tem caixas (as desmarcadas não vão no
+  POST). Sem esse campo (`Entrada.domingos = None`, ex.: chamadas antigas), todos os domingos em aberto contam
+  como confirmados, que era o significado do aporte sugerido antes da v4.
+- A validação das caixas corre dentro da transação e usa a data da leitura **efetivamente gravada** (uma linha
+  regravada igual mantém a sua data); uma caixa inválida desfaz a gravação toda.
+- O valor de cada depósito é sempre o do plano (n €); um depósito diferente do plano vai no aporte e gera o
+  aviso de diferença.
+- Limitação conhecida: uma base com vários meses gravados **antes** da v4 mostraria os domingos desses meses
+  como "em atraso" (não há confirmações). A base real só tinha o saldo inicial de outubro: não se aplica.
+  Também: um mês gravado com todas as caixas desmarcadas reabre com todas marcadas (sem confirmações não se
+  distingue de um mês anterior à v4); o aviso de diferença no aporte apanha uma regravação por engano.
+- Efeito no backup: a primeira cópia depois do `git pull` cria uma pasta nova (passa a ter
+  `depositos_desafio.csv`), tal como aconteceu com o `configuracao.csv` a 20/10.
+
+**Verificado:** 368 testes; no Chromium (Playwright, base fictícia na cloud): desmarcar/marcar acerta o
+aporte, gravação, partes do painel (703 + 117 + 41 + 42 = 903 € = semanas 1 a 42), e o aviso do
+"Guardar e sair" no check-in (sem alterações sai; com caixa desmarcada ou saldo escrito pergunta e fica).
+**Por confirmar:** o ecrã no Windows com a base real depois do `git pull` (migração v3 → v4 no arranque).
+
+**Esquema:** **subiu de 3 para 4.** Migração: `CREATE TABLE IF NOT EXISTS` no arranque (`init_db`); bases v3
+abrem sem perder dados. Testado em `test_migracao.py`.
 
 ---
 

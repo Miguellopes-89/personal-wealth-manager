@@ -6,8 +6,8 @@ num único ecrã e vês logo o resultado (ganho do mês, avisos), sem passar por
 Os dados ficam na tua máquina, numa base de dados SQLite. Não há contas, nem serviços externos, nem CDN.
 
 > **Estado:** versão 1 completa: painel, check-in mensal, gestão de plataformas, cópia de segurança e restauro,
-> com o design final. Em uso desde outubro de 2026. Versão 2 em curso: cobertura do fundo de liberdade feita;
-> a seguir, metas de poupança e comparação com índices.
+> com o design final. Em uso desde outubro de 2026. Versão 2 em curso: cobertura do fundo de liberdade e registo
+> dos depósitos do Desafio das 52 semanas feitos; a seguir, metas de poupança e comparação com índices.
 
 ![Painel](docs/capturas/painel.png)
 
@@ -22,11 +22,12 @@ As capturas usam os dados fictícios da demonstração (ver abaixo).
 - **Painel** (`/`): património total, variação face ao mês anterior e ganho do mês; evolução do património
   por categoria, alocação (poupança, investimento, reforma), a lista das plataformas agrupada por categoria
   (saldo, ganho, aporte real vs plano), a cobertura do fundo de liberdade (quantos meses de despesas paga,
-  com a despesa mensal de referência editável no próprio painel) e o progresso do Desafio das 52 semanas. Gráficos com Chart.js guardado
+  com a despesa mensal de referência editável no próprio painel) e o progresso do Desafio das 52 semanas
+  (confirmados, em falta e por confirmar). Gráficos com Chart.js guardado
   localmente.
 - **Check-in mensal** (`/checkin`): uma linha por plataforma, com o saldo do mês anterior só como
-  referência e o aporte pré-preenchido pelo plano (no Desafio das 52 semanas, agrupado por mês com o detalhe
-  das semanas ao clicar). Grava tudo ou nada, e mostra o ganho do mês e os avisos
+  referência e o aporte pré-preenchido pelo plano (no Desafio das 52 semanas, uma caixa por domingo em
+  aberto, agrupadas por mês). Grava tudo ou nada, e mostra o ganho do mês e os avisos
   logo a seguir. Regravar um mês atualiza-o, não duplica.
 - **Plataformas** (`/plataformas`): criar, editar, desativar e reativar (com o plano mensal ou o Desafio das
   52 semanas). Só se desativa uma conta fechada: primeiro grava-se no check-in o saldo 0, com o levantamento
@@ -35,9 +36,10 @@ As capturas usam os dados fictícios da demonstração (ver abaixo).
 - **Ganho do mês** = saldo − saldo do mês anterior − aporte. Plataformas como contas correntes ou
   numerário (onde salários e transferências não são lucro) ficam só com saldo, sem ganho.
 - **Avisos**: ganho negativo e mês em falta.
-- **Desafio das 52 semanas**: plano de depósitos semanais (1 €, 2 €, … 52 €, ao domingo). Entre duas
-  leituras, a app sugere o aporte somando os domingos desse intervalo, e depois de gravar avisa se o rendimento
-  anualizado sair de uma faixa plausível (3–8 %), o que apanha erros de aporte.
+- **Desafio das 52 semanas**: plano de depósitos semanais (1 €, 2 €, … 52 €, ao domingo). No check-in, cada
+  domingo em aberto tem uma caixa: marcados entram no aporte e ficam registados como depositados; um domingo
+  desmarcado volta no check-in seguinte ("em atraso"). Depois de gravar, a app avisa se o rendimento
+  anualizado sair de uma faixa plausível (3–8 %) ou se o aporte não bater com as caixas marcadas.
 - **Cópia de segurança** em CSV (`;`, UTF-8 com BOM, abre direto no Excel): no arranque, depois de cada
   gravação e no botão "Guardar e sair". Nunca sobrescreve, não duplica cópias iguais, mantém as 30 mais
   recentes e a última de cada mês.
