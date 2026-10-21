@@ -71,17 +71,28 @@
         <td class="num" data-rotulo="Aporte do mês (€)">
           <input type="text" inputmode="decimal" autocomplete="off" name="aporte_{{ l.plataforma_id }}" value="{{ item.aporte }}" aria-label="Aporte do mês de {{ l.nome }}">
           {% if l.sugestao %}
-          <div class="sub">
-            Plano: {{ l.sugestao.total_cent|eur }}{% if not l.sugestao.semanas %} (nenhum domingo desde {{ l.data_leitura_anterior.strftime('%d/%m') }}){% endif %}
+          <div class="sub desafio">
+            {% if not l.sugestao.semanas %}
+            Desafio: nenhum domingo em aberto desde {{ l.data_leitura_anterior.strftime('%d/%m') }}.
+            {% else %}
+            <input type="hidden" name="desafio_{{ l.plataforma_id }}" value="1">
+            <div>Desafio: marca os domingos cujo depósito já está no saldo.</div>
             {% for g in l.sugestao.por_mes %}
-            <details class="mes-plano">
-              <summary>{{ g.mes|mes }} · {{ g.total_cent|eur }}</summary>
+            <fieldset class="mes-plano">
+              <legend>{{ g.mes|mes }} · {{ g.total_cent|eur }}</legend>
               {% for s in g.semanas %}
-              <div>sem. {{ s.numero }} · {{ s.data.strftime('%d/%m') }} · {{ s.valor_cent|eur }}</div>
+              <label class="domingo">
+                <input type="checkbox" name="domingo_{{ l.plataforma_id }}" value="{{ s.data.isoformat() }}"
+                       data-valor="{{ s.valor_cent }}" data-aporte="aporte_{{ l.plataforma_id }}"
+                       {% if s.data.isoformat() in item.marcados %}checked{% endif %}>
+                sem. {{ s.numero }} · {{ s.data.strftime('%d/%m') }} · {{ s.valor_cent|eur }}
+                {% if s.em_atraso %}<span class="aviso">em atraso</span>{% endif %}
+                {% if s.dia_da_leitura %}<span class="aviso">dia da leitura: confirma que já está no saldo</span>{% endif %}
+              </label>
               {% endfor %}
-            </details>
-            {% if g.tem_dia_da_leitura %}<div class="aviso">Inclui o domingo do dia da leitura: confirma que já está no saldo.</div>{% endif %}
+            </fieldset>
             {% endfor %}
+            {% endif %}
           </div>
           {% elif l.nota_plano %}
           <div class="sub aviso">{{ l.nota_plano }}</div>
@@ -114,12 +125,33 @@
   };
   topo.mes.addEventListener('input', verificar); topo.data.addEventListener('input', verificar);
 })();
+// Desafio: marcar ou desmarcar um domingo soma ou tira o seu valor ao aporte da linha (que continua editável).
+(() => {
+  const paraCent = t => {
+    const m = /^\s*(-?)(\d+)(?:,(\d{1,2}))?\s*$/.exec(t);
+    if (!m) return null;
+    const c = parseInt(m[2], 10) * 100 + parseInt((m[3] || '0').padEnd(2, '0'), 10);
+    return m[1] ? -c : c;
+  };
+  const paraTexto = c => (c < 0 ? '-' : '') + Math.floor(Math.abs(c) / 100) + ',' + String(Math.abs(c) % 100).padStart(2, '0');
+  document.querySelectorAll('input[type="checkbox"][name^="domingo_"]').forEach(caixa => {
+    caixa.addEventListener('change', () => {
+      const aporte = document.querySelector(`input[name="${caixa.dataset.aporte}"]`);
+      const atual = paraCent(aporte.value || '0');
+      if (atual === null) return;  // texto que não sabemos ler: o utilizador corrige à mão
+      const valor = parseInt(caixa.dataset.valor, 10);
+      aporte.value = paraTexto(atual + (caixa.checked ? valor : -valor));
+    });
+  });
+})();
 // "Guardar e sair" (na barra lateral) grava a cópia de segurança, não o check-in: avisa se há valores escritos e por gravar.
 (() => {
   const campos = [...document.querySelectorAll('input[name^="saldo_"], input[name^="aporte_"]')];
+  const caixas = [...document.querySelectorAll('input[name^="domingo_"]')];
   const iniciais = new Map(campos.map(c => [c, c.value]));
+  const marcadas = new Map(caixas.map(c => [c, c.checked]));
   document.getElementById('form-sair').addEventListener('submit', ev => {
-    const porGravar = campos.some(c => c.value !== iniciais.get(c));
+    const porGravar = campos.some(c => c.value !== iniciais.get(c)) || caixas.some(c => c.checked !== marcadas.get(c));
     if (porGravar && !confirm('Há valores escritos que ainda não foram gravados. Sair mesmo assim? (Perdem-se.)')) {
       ev.preventDefault();
     }

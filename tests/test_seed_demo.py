@@ -71,3 +71,10 @@ def test_carrega_uma_vez_e_recusa_base_com_dados(monkeypatch, tmp_path):
     monkeypatch.setenv("PWM_BACKUP", str(tmp_path / "demo-backup"))
     assert seed_demo.main() == 0
     assert seed_demo.main() == 1
+
+
+def test_demo_confirma_os_depositos_do_desafio(conn):
+    seed_demo.carregar(conn)
+    soma = conn.execute("SELECT SUM(valor_cent) FROM depositos_desafio").fetchone()[0]
+    aportes = sum(r["aporte_cent"] for r in _registos(conn, seed_demo.NOME_P2P))
+    assert soma == aportes > 0

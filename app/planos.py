@@ -25,6 +25,7 @@ class Semana:
     numero: int  # n-ésimo domingo do ano
     valor_cent: int
     dia_da_leitura: bool = False  # domingo igual ao dia da leitura: o depósito pode ainda não estar no saldo
+    em_atraso: bool = False  # já devia ter entrado num check-in anterior e não foi confirmado
 
 
 @dataclass(frozen=True)
@@ -84,21 +85,30 @@ def sugerir_desafio(
     leitura_anterior: date,
     leitura_atual: date,
     data_inicio: date | None = None,
+    excluir: frozenset[date] = frozenset(),
+    atraso_ate: date | None = None,
 ) -> Sugestao:
     """Domingos com leitura_anterior < domingo <= leitura_atual (cada domingo conta uma só vez).
 
     O domingo da leitura anterior já está no saldo dessa leitura; o da leitura atual entra,
-    marcado em `dia_da_leitura`. Domingos antes de `data_inicio` são ignorados.
+    marcado em `dia_da_leitura`. Domingos antes de `data_inicio` ou em `excluir` (já confirmados) são
+    ignorados. Domingos em ou antes de `atraso_ate` (a leitura anterior) ficam marcados `em_atraso`.
     """
     if leitura_atual <= leitura_anterior:
         raise ValueError("A leitura atual tem de ser posterior à anterior")
     semanas: list[Semana] = []
     d = _proximo_domingo(leitura_anterior + timedelta(days=1))
     while d <= leitura_atual:
-        if data_inicio is None or d >= data_inicio:
+        if (data_inicio is None or d >= data_inicio) and d not in excluir:
             valor = valor_do_domingo(d)
             if valor is not None:
-                semanas.append(Semana(d, numero_do_domingo(d), valor, dia_da_leitura=(d == leitura_atual)))
+                semanas.append(
+                    Semana(
+                        d, numero_do_domingo(d), valor,
+                        dia_da_leitura=(d == leitura_atual),
+                        em_atraso=atraso_ate is not None and d <= atraso_ate,
+                    )
+                )
         d += timedelta(days=7)
     return Sugestao(tuple(semanas))
 

@@ -13,6 +13,11 @@ Regras:
 - Cada registo guarda a DATA da leitura (tem de pertencer ao mês e não pode ser futura). O aporte
   de plataformas com plano semanal (Desafio das 52 semanas) é sugerido a partir das datas das duas
   leituras; é só uma sugestão: o que fica gravado é o que o utilizador confirmar.
+- Desafio das 52 semanas: cada domingo em aberto aparece com uma caixa (marcada por defeito). Os domingos
+  marcados ficam gravados em `depositos_desafio`; um domingo desmarcado continua em aberto e volta a
+  aparecer no check-in seguinte ("em atraso"), em vez de se perder entre duas leituras.
+  Em aberto = domingos do plano depois da PRIMEIRA leitura datada da plataforma (o saldo inicial já inclui
+  os anteriores) e até à leitura atual, menos os confirmados noutros meses.
 """
 from __future__ import annotations
 
@@ -41,6 +46,7 @@ class Linha:
     data_leitura_anterior: date | None = None
     sugestao: planos.Sugestao | None = None  # aporte sugerido por um plano semanal
     nota_plano: str | None = None  # porque não há sugestão, quando devia haver
+    domingos_marcados: frozenset[date] = frozenset()  # caixas a mostrar marcadas
 
 
 @dataclass(frozen=True)
@@ -50,6 +56,7 @@ class Entrada:
     plataforma_id: int
     saldo: str
     aporte: str = ""
+    domingos: tuple[str, ...] | None = None  # caixas do desafio marcadas (AAAA-MM-DD); None = linha sem caixas
 
 
 @dataclass(frozen=True)
@@ -125,28 +132,65 @@ def ler_data(texto: str | None) -> date | None:
         return None
 
 
-def _sugerir_plano(
-    conn: sqlite3.Connection,
-    plataforma_id: int,
-    tem_anterior: bool,
-    anterior: date | None,
-    atual: date | None,
-) -> tuple[planos.Sugestao | None, str | None]:
-    """(sugestão, nota). Sem plano, sem data, ou no primeiro registo (saldo inicial): nada a sugerir."""
+def _inicio_desafio(conn: sqlite3.Connection, plataforma_id: int) -> tuple[bool, date | None]:
+    """(tem o Desafio, data de início válida ou None)."""
     plano = conn.execute(
         "SELECT data_inicio FROM planos WHERE plataforma_id = ? AND tipo = ? ORDER BY id LIMIT 1",
         (plataforma_id, planos.TIPO_DESAFIO_52),
     ).fetchone()
-    if plano is None or atual is None or not tem_anterior:
+    if plano is None:
+        return False, None
+    return True, ler_data(plano["data_inicio"])
+
+
+def confirmados(conn: sqlite3.Connection, plataforma_id: int, mes: str | None = None) -> dict[date, str]:
+    """Domingos já confirmados -> mês do check-in em que entraram (todos, ou só os de `mes`)."""
+    sql = "SELECT domingo, mes FROM depositos_desafio WHERE plataforma_id = ?"
+    args: tuple = (plataforma_id,)
+    if mes is not None:
+        sql += " AND mes = ?"
+        args += (mes,)
+    return {d: r["mes"] for r in conn.execute(sql, args) if (d := ler_data(r["domingo"])) is not None}
+
+
+def _primeira_leitura(conn: sqlite3.Connection, plataforma_id: int, mes: str) -> date | None:
+    """Data do primeiro registo da plataforma antes de `mes` (o saldo inicial); None se não tiver data."""
+    linha = conn.execute(
+        """SELECT data_leitura FROM registos_mensais WHERE plataforma_id = ? AND mes < ?
+           ORDER BY mes LIMIT 1""",
+        (plataforma_id, mes),
+    ).fetchone()
+    return ler_data(linha["data_leitura"]) if linha else None
+
+
+def domingos_em_aberto(
+    conn: sqlite3.Connection,
+    plataforma_id: int,
+    mes: str,
+    anterior: date | None,
+    atual: date | None,
+) -> tuple[planos.Sugestao | None, str | None]:
+    """(sugestão, nota) para o check-in de `mes` com leitura em `atual`.
+
+    Sem plano, sem data, ou no primeiro registo (saldo inicial): nada a sugerir. Os domingos já confirmados
+    neste mesmo mês continuam na lista (para se poderem desmarcar ao regravar).
+    """
+    tem, inicio = _inicio_desafio(conn, plataforma_id)
+    tem_anterior = conn.execute(
+        "SELECT 1 FROM registos_mensais WHERE plataforma_id = ? AND mes < ? LIMIT 1", (plataforma_id, mes)
+    ).fetchone() is not None
+    if not tem or atual is None or not tem_anterior:
         return None, None
-    inicio = ler_data(plano["data_inicio"])
     if inicio is None:
         return None, "O plano tem uma data de início inválida: aporte do desafio não sugerido."
     if anterior is None:
         return None, "Sem data da leitura anterior: aporte do desafio não sugerido."
     if atual <= anterior:
         return None, f"A data da leitura tem de ser posterior à anterior ({anterior:%d/%m/%Y})."
-    return planos.sugerir_desafio(anterior, atual, inicio), None
+    # Registos antigos sem data no saldo inicial: conta só a partir da leitura anterior (como antes da v4).
+    base = _primeira_leitura(conn, plataforma_id, mes) or anterior
+    outros = frozenset(d for d, m in confirmados(conn, plataforma_id).items() if m != mes)
+    return planos.sugerir_desafio(min(base, anterior), atual, inicio, excluir=outros, atraso_ate=anterior), None
 
 
 def linhas_checkin(conn: sqlite3.Connection, mes: str, data_leitura: date | None = None) -> list[Linha]:
@@ -173,7 +217,14 @@ def linhas_checkin(conn: sqlite3.Connection, mes: str, data_leitura: date | None
             (p["id"], mes),
         ).fetchone()
         data_anterior = ler_data(anterior["data_leitura"]) if anterior else None
-        sugestao, nota = _sugerir_plano(conn, p["id"], anterior is not None, data_anterior, data_leitura)
+        sugestao, nota = domingos_em_aberto(conn, p["id"], mes, data_anterior, data_leitura)
+        marcados: frozenset[date] = frozenset()
+        if sugestao:
+            # Mês ainda por registar: tudo marcado. Já registado: o que foi confirmado nesse check-in
+            # (um mês gravado antes da v4 não tem confirmações e mostra tudo marcado, como era o aporte).
+            deste_mes = frozenset(confirmados(conn, p["id"], mes))
+            em_lista = frozenset(s.data for s in sugestao.semanas)
+            marcados = deste_mes & em_lista if atual and deste_mes else em_lista
         if atual:
             aporte = atual["aporte_cent"]
         else:
@@ -193,6 +244,7 @@ def linhas_checkin(conn: sqlite3.Connection, mes: str, data_leitura: date | None
                 data_leitura_anterior=data_anterior,
                 sugestao=sugestao,
                 nota_plano=nota,
+                domingos_marcados=marcados,
             )
         )
     return linhas
@@ -227,6 +279,56 @@ def _avisos_do_plano(
         return ()
     aviso = planos.aviso_rendimento(ganho_cent, anterior["saldo_cent"], (data_atual - data_anterior).days)
     return (aviso,) if aviso else ()
+
+
+class _ErroDomingos(ValueError):
+    def __init__(self, plataforma_id: int, mensagem: str):
+        super().__init__(mensagem)
+        self.plataforma_id = plataforma_id
+
+
+def _gravar_depositos(
+    conn: sqlite3.Connection, plataforma_id: int, mes: str, marcados: tuple[str, ...] | None
+) -> int | None:
+    """Substitui os domingos confirmados neste check-in. Devolve a soma confirmada (None = sem desafio).
+
+    Usa a data da leitura que ficou gravada (uma linha regravada igual mantém a sua). `marcados=None`
+    (chamada sem caixas) confirma todos os domingos em aberto, como o aporte sugerido fazia antes da v4.
+    Levanta `_ErroDomingos` se uma caixa não corresponder a um domingo em aberto.
+    """
+    atual = conn.execute(
+        "SELECT data_leitura FROM registos_mensais WHERE plataforma_id = ? AND mes = ?", (plataforma_id, mes)
+    ).fetchone()
+    anterior = conn.execute(
+        """SELECT data_leitura FROM registos_mensais WHERE plataforma_id = ? AND mes < ?
+           ORDER BY mes DESC LIMIT 1""",
+        (plataforma_id, mes),
+    ).fetchone()
+    sugestao, _ = domingos_em_aberto(
+        conn, plataforma_id, mes,
+        ler_data(anterior["data_leitura"]) if anterior else None,
+        ler_data(atual["data_leitura"]) if atual else None,
+    )
+    if sugestao is None:
+        if marcados:
+            raise _ErroDomingos(plataforma_id, "Domingos do desafio marcados, mas não há nenhum em aberto.")
+        return None
+    em_aberto = {s.data: s for s in sugestao.semanas}
+    if marcados is None:
+        escolhidos = list(em_aberto.values())
+    else:
+        escolhidos = []
+        for texto in dict.fromkeys(marcados):  # ignora repetidos, mantém a ordem
+            d = ler_data(texto)
+            if d is None or d not in em_aberto:
+                raise _ErroDomingos(plataforma_id, f"Domingo do desafio inválido ou já não em aberto: {texto!r}")
+            escolhidos.append(em_aberto[d])
+    conn.execute("DELETE FROM depositos_desafio WHERE plataforma_id = ? AND mes = ?", (plataforma_id, mes))
+    conn.executemany(
+        "INSERT INTO depositos_desafio (plataforma_id, domingo, valor_cent, mes) VALUES (?, ?, ?, ?)",
+        [(plataforma_id, s.data.isoformat(), s.valor_cent, mes) for s in escolhidos],
+    )
+    return sum(s.valor_cent for s in escolhidos)
 
 
 def gravar_checkin(
@@ -280,22 +382,31 @@ def gravar_checkin(
     if erros:
         return Resultado(erros=erros, ignorados=tuple(ignorados))
 
-    with conn:  # transação: confirma tudo ou desfaz tudo
-        conn.executemany(
-            """INSERT INTO registos_mensais (plataforma_id, mes, saldo_cent, aporte_cent, data_leitura)
-               VALUES (?, ?, ?, ?, ?)
-               ON CONFLICT(plataforma_id, mes) DO UPDATE SET
-                   saldo_cent = excluded.saldo_cent,
-                   aporte_cent = excluded.aporte_cent,
-                   -- Uma linha que volta igual (o ecrã pré-preenche o que já está gravado) mantém a sua data:
-                   -- reescrevê-la com a de hoje desloca a sugestão da Bondora do mês seguinte.
-                   data_leitura = CASE
-                       WHEN saldo_cent = excluded.saldo_cent AND aporte_cent = excluded.aporte_cent
-                           THEN COALESCE(data_leitura, excluded.data_leitura)
-                       ELSE COALESCE(excluded.data_leitura, data_leitura)
-                   END""",
-            [(pid, mes, saldo, aporte, data_iso) for pid, saldo, aporte in a_gravar],
-        )
+    domingos_por_pid = {e.plataforma_id: e.domingos for e in entradas}
+    confirmados_por_pid: dict[int, int] = {}  # soma dos domingos confirmados, para comparar com o aporte
+    try:
+        with conn:  # transação: confirma tudo ou desfaz tudo
+            conn.executemany(
+                """INSERT INTO registos_mensais (plataforma_id, mes, saldo_cent, aporte_cent, data_leitura)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(plataforma_id, mes) DO UPDATE SET
+                       saldo_cent = excluded.saldo_cent,
+                       aporte_cent = excluded.aporte_cent,
+                       -- Uma linha que volta igual (o ecrã pré-preenche o que já está gravado) mantém a sua data:
+                       -- reescrevê-la com a de hoje desloca a sugestão da Bondora do mês seguinte.
+                       data_leitura = CASE
+                           WHEN saldo_cent = excluded.saldo_cent AND aporte_cent = excluded.aporte_cent
+                               THEN COALESCE(data_leitura, excluded.data_leitura)
+                           ELSE COALESCE(excluded.data_leitura, data_leitura)
+                       END""",
+                [(pid, mes, saldo, aporte, data_iso) for pid, saldo, aporte in a_gravar],
+            )
+            for pid, _, _ in a_gravar:
+                soma = _gravar_depositos(conn, pid, mes, domingos_por_pid.get(pid))
+                if soma is not None:
+                    confirmados_por_pid[pid] = soma
+    except _ErroDomingos as exc:  # nada ficou gravado (a transação foi desfeita)
+        return Resultado(erros={exc.plataforma_id: str(exc)}, ignorados=tuple(ignorados))
 
     gravados: list[Gravado] = []
     for pid, _, _ in a_gravar:
@@ -312,6 +423,12 @@ def gravar_checkin(
             avisos_plano = _avisos_do_plano(conn, pid, mes, resultado.ganho_cent)
         except Exception as exc:
             avisos_plano = (f"Não foi possível verificar o rendimento ({type(exc).__name__}: {exc}).",)
+        soma = confirmados_por_pid.get(pid)
+        if soma is not None and soma != resultado.aporte_cent:
+            avisos_plano += (
+                f"O aporte ({calc.formatar_euros(resultado.aporte_cent)}) é diferente da soma dos domingos "
+                f"confirmados ({calc.formatar_euros(soma)}): confirma se houve outros depósitos ou levantamentos.",
+            )
         gravados.append(Gravado(pid, ativas[pid]["nome"], resultado, avisos_plano))
 
     return Resultado(gravados=tuple(gravados), ignorados=tuple(ignorados))

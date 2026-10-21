@@ -72,7 +72,8 @@ SO_SALDO_EUR = {
 
 
 def carregar(conn: sqlite3.Connection) -> None:
-    """Insere plataformas, o plano do Desafio, a despesa de referência e três meses de registos fictícios.
+    """Insere plataformas, o plano do Desafio (com os depósitos confirmados), a despesa de referência e três
+    meses de registos fictícios.
 
     Tudo numa transação.
     """
@@ -99,18 +100,25 @@ def carregar(conn: sqlite3.Connection) -> None:
             if p["calcula_ganho"]:
                 saldo = INICIAL_EUR[p["nome"]] * 100
                 for i, leitura in enumerate(LEITURAS):
+                    semanas: tuple[planos.Semana, ...] = ()
                     if i == 0:
                         aporte = 0  # saldo inicial: sem ganho
                     else:
                         if p["nome"] == NOME_P2P:
-                            aporte = planos.sugerir_desafio(LEITURAS[i - 1], leitura, inicio).total_cent
+                            semanas = planos.sugerir_desafio(LEITURAS[i - 1], leitura, inicio).semanas
+                            aporte = sum(s.valor_cent for s in semanas)
                         else:
                             aporte = p["plano_mensal_cent"]
                         saldo = round((saldo + aporte) * (1 + TAXA_MENSAL[p["nome"]]))
+                    mes = checkin.mes_de(leitura)
                     conn.execute(
                         """INSERT INTO registos_mensais (plataforma_id, mes, saldo_cent, aporte_cent, data_leitura)
                            VALUES (?, ?, ?, ?, ?)""",
-                        (p["id"], checkin.mes_de(leitura), saldo, aporte, leitura.isoformat()),
+                        (p["id"], mes, saldo, aporte, leitura.isoformat()),
+                    )
+                    conn.executemany(  # todos os depósitos do desafio confirmados no check-in
+                        "INSERT INTO depositos_desafio (plataforma_id, domingo, valor_cent, mes) VALUES (?, ?, ?, ?)",
+                        [(p["id"], s.data.isoformat(), s.valor_cent, mes) for s in semanas],
                     )
             else:
                 for leitura, saldo_eur in zip(LEITURAS, SO_SALDO_EUR[p["nome"]]):

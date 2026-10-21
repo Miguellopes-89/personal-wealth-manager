@@ -130,10 +130,13 @@ def sair(request: Request, tarefas: BackgroundTasks):
     return templates.TemplateResponse(request, "sair.html", {"copia": copia.name})
 
 
-def _contexto(conn, mes, data_leitura, valores=None, erros=None, resultado=None, erro_geral=None) -> dict:
-    """Prepara o ecrã: `valores` são os textos que o utilizador escreveu (para não os perder num erro)."""
+def _contexto(conn, mes, data_leitura, valores=None, erros=None, resultado=None, erro_geral=None,
+              marcados=None) -> dict:
+    """Prepara o ecrã: `valores` são os textos que o utilizador escreveu (para não os perder num erro);
+    `marcados`, as caixas do desafio que ele tinha marcadas (plataforma -> datas AAAA-MM-DD)."""
     valores = valores or {}
     erros = erros or {}
+    marcados = marcados or {}
     linhas = []
     for l in checkin.linhas_checkin(conn, mes, data_leitura):
         por_defeito = (
@@ -141,7 +144,9 @@ def _contexto(conn, mes, data_leitura, valores=None, erros=None, resultado=None,
             checkin.cent_para_texto(l.aporte_cent),
         )
         saldo, aporte = valores.get(l.plataforma_id, por_defeito)
-        linhas.append({"l": l, "saldo": saldo, "aporte": aporte, "erro": erros.get(l.plataforma_id)})
+        caixas = marcados.get(l.plataforma_id, {d.isoformat() for d in l.domingos_marcados})
+        linhas.append({"l": l, "saldo": saldo, "aporte": aporte, "erro": erros.get(l.plataforma_id),
+                       "marcados": caixas})
     return {
         "mes": mes,
         "data_leitura": data_leitura.isoformat(),
@@ -206,6 +211,7 @@ async def checkin_gravar(request: Request):
 
     entradas: list[checkin.Entrada] = []
     valores: dict[int, tuple[str, str]] = {}
+    marcados: dict[int, set[str]] = {}
     for chave, valor in form.items():
         if not chave.startswith("saldo_"):
             continue
@@ -214,8 +220,12 @@ async def checkin_gravar(request: Request):
         except ValueError:
             continue
         aporte = str(form.get(f"aporte_{pid}", ""))
-        entradas.append(checkin.Entrada(pid, str(valor), aporte))
+        # A linha traz caixas do desafio (marcador escondido): as não marcadas não chegam no formulário.
+        domingos = tuple(str(d) for d in form.getlist(f"domingo_{pid}")) if form.get(f"desafio_{pid}") else None
+        entradas.append(checkin.Entrada(pid, str(valor), aporte, domingos))
         valores[pid] = (str(valor), aporte)
+        if domingos is not None:
+            marcados[pid] = set(domingos)
 
     conn = db.connect()
     try:
@@ -228,7 +238,7 @@ async def checkin_gravar(request: Request):
             return templates.TemplateResponse(request, "checkin.html", contexto, status_code=400)
         if not resultado.ok:
             contexto = _contexto(
-                conn, mes, data, valores=valores, erros=resultado.erros,
+                conn, mes, data, valores=valores, erros=resultado.erros, marcados=marcados,
                 erro_geral="Nada foi gravado: corrige as linhas assinaladas.",
             )
             return templates.TemplateResponse(request, "checkin.html", contexto, status_code=422)

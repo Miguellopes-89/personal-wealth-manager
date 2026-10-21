@@ -222,8 +222,9 @@ def test_sem_aviso_de_rendimento_quando_o_aporte_bate_certo(conn):
 def test_aviso_quando_um_deposito_feito_nao_foi_declarado(conn):
     r = _outubro_e_novembro(conn, "85,00")  # os 44 € de 1/11 entraram no saldo mas ficaram fora do aporte
     avisos = r.gravados[0].avisos_plano
-    assert len(avisos) == 1
+    assert len(avisos) == 2
     assert "22,7 %" in avisos[0]
+    assert "diferente da soma dos domingos confirmados (129,00 €)" in avisos[1]
 
 
 def test_aviso_quando_o_deposito_declarado_nao_chegou(conn):

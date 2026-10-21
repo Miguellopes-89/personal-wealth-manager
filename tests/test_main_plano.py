@@ -136,8 +136,10 @@ def test_ecra_diz_onde_vai_gravar(cliente):
 def test_ecra_agrupa_as_semanas_do_desafio_por_mes(cliente):
     _bondora_com_leitura_anterior()
     r = cliente.get(f"/checkin?mes={MES}")  # domingos 4, 11, 18 e 25 de janeiro: 10 €
-    assert "<summary>01-2026 · 10,00 €</summary>" in r.text
-    assert r.text.count("<details") == 1
+    assert "<legend>01-2026 · 10,00 €</legend>" in r.text
+    assert r.text.count('<fieldset class="mes-plano">') == 1
+    assert r.text.count('type="checkbox" name="domingo_') == 4
+    assert r.text.count(" checked>") == 4  # mês por registar: tudo marcado
 
 
 def test_ecra_mostra_o_nome_da_categoria_e_nao_o_codigo(cliente):
@@ -152,3 +154,64 @@ def test_sair_pede_confirmacao_com_valores_por_gravar(cliente):
     assert 'id="form-sair"' in r.text and "confirm(" in r.text
     # o script liga-se ao formulário pelo id: o formulário tem de existir antes de o script correr
     assert r.text.index('id="form-sair"') < r.text.index("getElementById('form-sair')")
+
+
+# --- caixas do desafio (esquema v4) ----------------------------------------------------------
+
+def _confirmados():
+    conn = db.connect()
+    try:
+        return [(r[0], r[1]) for r in conn.execute("SELECT domingo, mes FROM depositos_desafio ORDER BY domingo")]
+    finally:
+        conn.close()
+
+
+def _post_bondora(cliente, pid, domingos, marcador=True, aporte="5,00"):
+    dados = {"mes": MES, "data": "2026-01-31", f"saldo_{pid}": "1010,00", f"aporte_{pid}": aporte}
+    if marcador:
+        dados[f"desafio_{pid}"] = "1"
+    if domingos:
+        dados[f"domingo_{pid}"] = list(domingos)
+    return cliente.post("/checkin", data=dados)
+
+
+def test_gravar_guarda_so_os_domingos_marcados(cliente):
+    pid = _bondora_com_leitura_anterior()
+    r = _post_bondora(cliente, pid, ["2026-01-04", "2026-01-25"])  # 1 € + 4 €
+    assert r.status_code == 200
+    assert _confirmados() == [("2026-01-04", MES), ("2026-01-25", MES)]
+
+
+def test_mes_gravado_reabre_com_as_caixas_confirmadas(cliente):
+    pid = _bondora_com_leitura_anterior()
+    _post_bondora(cliente, pid, ["2026-01-04", "2026-01-25"])
+    r = cliente.get(f"/checkin?mes={MES}")
+    assert r.text.count('type="checkbox" name="domingo_') == 4
+    assert r.text.count(" checked>") == 2
+
+
+def test_todas_desmarcadas_nao_confirma_nada(cliente):
+    pid = _bondora_com_leitura_anterior()
+    r = _post_bondora(cliente, pid, [], aporte="0,00")
+    assert r.status_code == 200
+    assert _confirmados() == []
+
+
+def test_formulario_sem_marcador_confirma_todos(cliente):
+    pid = _bondora_com_leitura_anterior()
+    _post_bondora(cliente, pid, [], marcador=False, aporte="10,00")
+    assert len(_confirmados()) == 4
+
+
+def test_domingo_invalido_devolve_422_e_mantem_as_caixas(cliente):
+    pid = _bondora_com_leitura_anterior()
+    r = _post_bondora(cliente, pid, ["2026-01-04", "2026-02-01"])
+    assert r.status_code == 422
+    assert _confirmados() == []
+    assert r.text.count(" checked>") == 1  # o 4/1 continua marcado; os outros não, como estavam
+
+
+def test_ecra_tem_o_script_que_acerta_o_aporte(cliente):
+    _bondora_com_leitura_anterior()
+    r = cliente.get(f"/checkin?mes={MES}")
+    assert 'data-valor="100"' in r.text and "caixa.checked ? valor : -valor" in r.text

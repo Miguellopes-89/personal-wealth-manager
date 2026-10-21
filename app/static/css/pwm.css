@@ -153,9 +153,11 @@ ul.simples { margin: .3rem 0; padding-left: 1.2rem; }
 .topo-checkin label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--secundario); }
 .checkin td input[type=text] { width: 9rem; text-align: right; }
 .checkin .ref { color: var(--secundario); }
-details.mes-plano { margin-top: .2rem; }
-details.mes-plano summary { cursor: pointer; color: var(--acento); }
-details.mes-plano > div { padding-right: .2rem; color: var(--secundario); }
+fieldset.mes-plano { margin: .35rem 0 0; padding: .25rem .5rem .35rem; border: 1px solid var(--linha); border-radius: var(--raio-peq); text-align: left; }
+fieldset.mes-plano legend { padding: 0 .25rem; color: var(--acento); }
+label.domingo { display: block; color: var(--secundario); white-space: nowrap; cursor: pointer; }
+label.domingo input { margin-right: .3rem; vertical-align: middle; }
+label.domingo .aviso { display: inline; margin-left: .3rem; }
 .notas { margin: .9rem .25rem; }
 .acoes {
   position: sticky; bottom: 0; z-index: 2;
