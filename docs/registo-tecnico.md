@@ -32,6 +32,11 @@ O computador antigo (pasta no OneDrive) deixa de fazer parte do fluxo depois da 
   correr `python -m app.restauro --destino "%LOCALAPPDATA%\pwm\pwm.db"` (o restauro nunca sobrescreve,
   por isso só funciona enquanto essa base não existir).
 
+**Verificado no computador novo (21/10/2026):** clone Git em `%USERPROFILE%\Projetos\personal-wealth-manager`,
+venv em `%LOCALAPPDATA%\pwm\venv` com Python 3.14.8, 324 testes a passar; restauro da cópia mais recente
+(12 plataformas, 11 registos, 1 plano, configuração vazia); `pwm.bat` arranca, serve o painel e os ficheiros
+locais, e "Guardar e sair" fecha a app. Pedido a `/favicon.ico` dá 404 (sem impacto).
+
 **Esquema:** sem alterações (versão 3).
 
 ---
