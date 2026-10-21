@@ -340,9 +340,18 @@ def _progresso_desafio(conn: sqlite3.Connection, pid: int, nome: str, inicio: da
 
 
 def dados_graficos(painel: Painel) -> dict:
-    """Os dados dos dois gráficos, em estruturas simples para o template as passar ao JavaScript (em cêntimos)."""
+    """Os dados dos dois gráficos, em estruturas simples para o template as passar ao JavaScript (em cêntimos).
+
+    `total_cent` é o património de cada mês (soma das categorias). `inicio_ano` é a posição do primeiro mês
+    do ano do painel: o filtro "Este ano" mostra a partir daí, "Desde o início" mostra tudo.
+    """
+    total = [sum(valores) for valores in zip(*(s.valores_cent for s in painel.evolucao))] or [0] * len(painel.meses)
+    ano = painel.mes[:4]
+    inicio_ano = next(i for i, m in enumerate(painel.meses) if m[:4] == ano)
     return {
         "meses": list(painel.meses),
+        "total_cent": total,
+        "inicio_ano": inicio_ano,
         "evolucao": [
             {"categoria": s.categoria, "rotulo": s.rotulo, "valores_cent": list(s.valores_cent)}
             for s in painel.evolucao

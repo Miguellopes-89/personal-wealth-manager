@@ -297,8 +297,42 @@ def test_dados_graficos(conn):
     _reg(conn, a, "2026-10", 200)
     dados = dashboard.dados_graficos(dashboard.construir_painel(conn, HOJE))
     assert dados["meses"] == ["2026-09", "2026-10"]
+    assert dados["total_cent"] == [100, 200]
+    assert dados["inicio_ano"] == 0
     assert dados["evolucao"] == [{"categoria": "investimento", "rotulo": "Investimento", "valores_cent": [100, 200]}]
     assert dados["alocacao"] == [{"categoria": "investimento", "rotulo": "Investimento", "valor_cent": 200}]
+
+
+def test_dados_graficos_total_soma_as_categorias_e_inclui_inativas(conn):
+    a = _plat(conn, "A", categoria="investimento")
+    b = _plat(conn, "B", categoria="reforma")
+    c = _plat(conn, "C", categoria="poupanca", ativa=0)  # inativa: conta só até ao último registo
+    _reg(conn, a, "2026-08", 10000)
+    _reg(conn, b, "2026-08", 5000)
+    _reg(conn, c, "2026-08", 700)
+    _reg(conn, a, "2026-09", 11000)
+    _reg(conn, b, "2026-10", 6000)  # setembro sem registo da B: conta o saldo de agosto
+    dados = dashboard.dados_graficos(dashboard.construir_painel(conn, HOJE))
+    assert dados["total_cent"] == [15700, 16000, 17000]
+    assert all(isinstance(v, int) for v in dados["total_cent"])
+
+
+def test_dados_graficos_inicio_do_ano_quando_ha_anos_anteriores(conn):
+    a = _plat(conn, "A")
+    _reg(conn, a, "2025-11", 100)
+    _reg(conn, a, "2026-02", 300)
+    dados = dashboard.dados_graficos(dashboard.construir_painel(conn, date(2026, 3, 5)))
+    assert dados["meses"] == ["2025-11", "2025-12", "2026-01", "2026-02"]
+    assert dados["inicio_ano"] == 2
+    assert dados["total_cent"][dados["inicio_ano"]:] == [100, 300]
+
+
+def test_dados_graficos_inicio_do_ano_com_um_so_mes_no_ano(conn):
+    a = _plat(conn, "A")
+    _reg(conn, a, "2025-12", 100)
+    _reg(conn, a, "2026-01", 150)
+    dados = dashboard.dados_graficos(dashboard.construir_painel(conn, date(2026, 1, 10)))
+    assert dados["inicio_ano"] == 1
 
 
 # --- Página web ---------------------------------------------------------------------------
@@ -557,3 +591,16 @@ def test_painel_mostra_as_partes_do_desafio(cliente, monkeypatch):
     assert "Confirmados no check-in: 85,00 €" in r.text
     assert "Em falta: 44,00 € (semana 44 · 01/11)" in r.text
     assert "Por confirmar no próximo check-in: 45,00 € (semana 45)" in r.text
+
+
+def test_painel_tem_filtro_do_periodo_e_grafico_em_linha(cliente):
+    _dados_na_base()
+    r = cliente.get("/")
+    assert r.status_code == 200
+    assert 'data-periodo="ano"' in r.text and 'data-periodo="tudo"' in r.text
+    assert "Este ano" in r.text and "Desde o início" in r.text
+    assert 'id="variacao-periodo"' in r.text
+    assert "type: 'line'" in r.text
+    assert '"inicio_ano": 0' in r.text and '"total_cent": [123456]' in r.text
+    # Os botões do filtro estão fora dos formulários com aviso ao sair: mudar de período não conta como alteração.
+    assert r.text.index('data-periodo="ano"') < r.text.index("graf-evolucao")

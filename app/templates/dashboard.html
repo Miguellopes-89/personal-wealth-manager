@@ -50,8 +50,16 @@
 
 <div class="graficos">
   <section class="caixa">
-    <h2>Evolução do património</h2>
+    <div class="cabecalho-grafico">
+      <h2>Evolução do património</h2>
+      <div class="segmentos" role="group" aria-label="Período do gráfico">
+        <button type="button" class="secundario" data-periodo="ano" aria-pressed="false">Este ano</button>
+        <button type="button" class="secundario" data-periodo="tudo" aria-pressed="true">Desde o início</button>
+      </div>
+    </div>
+    <div class="sub" id="variacao-periodo"></div>
     <div class="moldura"><canvas id="graf-evolucao"></canvas></div>
+    <div class="sub dica">Clica numa categoria da legenda para a mostrar ou esconder.</div>
   </section>
   <section class="caixa">
     <h2>Alocação: poupança, investimento e reforma</h2>
@@ -176,17 +184,27 @@ if (typeof Chart === 'undefined') {
 } else {
   Chart.defaults.font.family = '"Plex", system-ui, sans-serif';
   Chart.defaults.color = '#616b7a';
-  new Chart(document.getElementById('graf-evolucao'), {
-    type: 'bar',
+  // Evolução em linha: o total em destaque; as categorias ficam escondidas e ligam-se clicando na legenda.
+  const ACENTO = '#1e5a6e';
+  const rotulos = dados.meses.map(m => m.slice(5) + '-' + m.slice(0, 4));  // AAAA-MM -> MM-AAAA
+  const series = [{ label: 'Património total', valores: dados.total_cent, cor: ACENTO, total: true }]
+    .concat(dados.evolucao.map(s => ({ label: s.rotulo, valores: s.valores_cent, cor: CORES[s.categoria] || '#999', total: false })));
+  const evolucao = new Chart(document.getElementById('graf-evolucao'), {
+    type: 'line',
     data: {
-      labels: dados.meses.map(m => m.slice(5) + '-' + m.slice(0, 4)),  // AAAA-MM -> MM-AAAA
-      datasets: dados.evolucao.map(s => ({ label: s.rotulo, data: s.valores_cent, backgroundColor: CORES[s.categoria], stack: 'patrimonio', borderRadius: 3, maxBarThickness: 64 }))
+      labels: rotulos,
+      datasets: series.map(s => ({
+        label: s.label, data: s.valores, borderColor: s.cor, backgroundColor: s.total ? 'rgba(30, 90, 110, .08)' : s.cor,
+        fill: s.total ? 'origin' : false, borderWidth: s.total ? 2.5 : 1.5, pointRadius: s.total ? 3 : 2,
+        pointHoverRadius: 5, tension: 0.25, hidden: !s.total
+      }))
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { stacked: true, grid: { display: false } },
-        y: { stacked: true, border: { display: false }, grid: { color: '#e2e6eb' }, ticks: { callback: v => fmt(0).format(v / 100) + ' €' } }
+        x: { grid: { display: false } },
+        y: { beginAtZero: false, border: { display: false }, grid: { color: '#e2e6eb' }, ticks: { callback: v => fmt(0).format(v / 100) + ' €' } }
       },
       plugins: {
         legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 3 } },
@@ -194,6 +212,28 @@ if (typeof Chart === 'undefined') {
       }
     }
   });
+
+  // Filtro do período: "Este ano" (desde o primeiro mês do ano do painel) ou "Desde o início".
+  const variacao = document.getElementById('variacao-periodo');
+  const botoes = document.querySelectorAll('[data-periodo]');
+  function mostrarPeriodo(periodo) {
+    const inicio = periodo === 'ano' ? dados.inicio_ano : 0;
+    evolucao.data.labels = rotulos.slice(inicio);
+    evolucao.data.datasets.forEach((d, i) => { d.data = series[i].valores.slice(inicio); });
+    evolucao.update();
+    botoes.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.periodo === periodo)));
+    const total = dados.total_cent.slice(inicio);
+    if (total.length < 2) {
+      variacao.textContent = 'Só há um mês neste período: a variação aparece a partir do segundo.';
+    } else {
+      const delta = total[total.length - 1] - total[0];  // cêntimos inteiros
+      const pct = total[0] > 0 ? ' (' + (delta >= 0 ? '+' : '') + fmt(1).format(delta / total[0] * 100) + ' %)' : '';
+      variacao.textContent = 'Variação de ' + rotulos[inicio] + ' a ' + rotulos[rotulos.length - 1] + ': '
+        + (delta >= 0 ? '+' : '−') + eur(Math.abs(delta)) + pct;
+    }
+  }
+  botoes.forEach(b => b.addEventListener('click', () => mostrarPeriodo(b.dataset.periodo)));
+  mostrarPeriodo('tudo');
   const alocacao = document.getElementById('graf-alocacao');
   if (alocacao) {
     new Chart(alocacao, {
