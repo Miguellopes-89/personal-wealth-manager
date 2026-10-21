@@ -1,4 +1,4 @@
-"""Origem do crescimento do património: poupança (aportes + contas sem ganho), rendimento e plataformas novas.
+"""Origem do crescimento do património: dinheiro novo (aportes + contas sem ganho), rendimento e plataformas novas.
 
 Regra principal: em cada mês as partes somam exatamente a variação do património (cêntimos inteiros).
 Valores fictícios.
@@ -69,11 +69,11 @@ def test_separa_aportes_contas_sem_ganho_e_rendimento(conn):
     _reg(conn, conta, "2026-10", 230000)
     c = dashboard.construir_painel(conn, HOJE).crescimento[1]
     assert (c.mes, c.aportes_cent, c.liquidez_cent, c.rendimento_cent, c.novas_cent) == ("2026-10", 5000, 30000, 1234, 0)
-    assert c.poupanca_cent == 35000
+    assert c.dinheiro_novo_cent == 35000
     assert c.total_cent == 36234
 
 
-def test_despesas_maiores_que_o_salario_dao_poupanca_negativa(conn):
+def test_despesas_maiores_que_o_salario_dao_dinheiro_novo_negativo(conn):
     corretora = _plat(conn, "Corretora")
     conta = _plat(conn, "Conta", categoria="conta_corrente", ganho=0)
     _reg(conn, corretora, "2026-09", 100000)
@@ -81,7 +81,7 @@ def test_despesas_maiores_que_o_salario_dao_poupanca_negativa(conn):
     _reg(conn, corretora, "2026-10", 105000, aporte=5000)
     _reg(conn, conta, "2026-10", 120000)  # gastou 800 € e aportou 50 €
     c = dashboard.construir_painel(conn, HOJE).crescimento[1]
-    assert c.poupanca_cent == -75000
+    assert c.dinheiro_novo_cent == -75000
     assert c.rendimento_cent == 0
 
 
@@ -101,7 +101,7 @@ def test_levantamento_conta_como_aporte_negativo(conn):
     assert (c.aportes_cent, c.rendimento_cent) == (-20000, 300)
 
 
-def test_plataforma_nova_nao_conta_como_poupanca(conn):
+def test_plataforma_nova_nao_conta_como_dinheiro_novo(conn):
     a = _plat(conn, "A")
     _reg(conn, a, "2026-09", 100000)
     _reg(conn, a, "2026-10", 100000)
@@ -179,3 +179,49 @@ def test_dados_graficos_levam_as_partes_em_centimos(conn):
         None,
         {"aportes_cent": 5000, "liquidez_cent": 0, "rendimento_cent": 1000, "novas_cent": 0},
     ]
+
+
+# --- Página web ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def cliente(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    monkeypatch.setenv("PWM_DB", str(tmp_path / "teste.db"))
+    with TestClient(app) as c:
+        yield c
+
+
+def test_painel_mostra_a_secao_ligada_ao_filtro(cliente):
+    c = db.connect()
+    try:
+        a = _plat(c, "Corretora Exemplo")
+        _reg(c, a, "2026-01", 100000)
+        _reg(c, a, "2026-02", 106000, aporte=5000)
+        c.commit()
+    finally:
+        c.close()
+    r = cliente.get("/")
+    assert r.status_code == 200
+    assert "De onde veio o crescimento" in r.text
+    assert 'id="graf-crescimento"' in r.text and 'id="crescimento-corpo"' in r.text
+    assert '"aportes_cent": 5000' in r.text and '"rendimento_cent": 1000' in r.text
+    assert "mostrarCrescimento(inicio)" in r.text  # o filtro da evolução também muda esta secção
+    # Fora dos formulários com aviso ao sair: ver a secção não conta como alteração por gravar.
+    secao = r.text[r.text.index('aria-labelledby="titulo-crescimento"'):r.text.index("<h2>Plataformas</h2>")]
+    assert "<form" not in secao and "data-avisar-sair" not in secao
+
+
+def test_painel_com_um_so_mes_tem_a_secao_sem_partes(cliente):
+    c = db.connect()
+    try:
+        _reg(c, _plat(c, "Corretora Exemplo"), "2026-01", 100000)
+        c.commit()
+    finally:
+        c.close()
+    r = cliente.get("/")
+    assert r.status_code == 200
+    assert '"crescimento": [null]' in r.text

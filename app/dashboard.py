@@ -77,7 +77,7 @@ class Crescimento:
       salários e saem as despesas e os próprios aportes;
     - rendimento: soma dos ganhos do mês (juros, valorização; pode ser negativo);
     - novas: saldo inicial de uma plataforma cujo primeiro registo é neste mês (não é poupança nem rendimento).
-    Os aportes saem das contas à ordem: "poupança" (aportes + liquidez) é o dinheiro novo que o casal pôs de lado.
+    Os aportes saem das contas à ordem: "dinheiro novo" (aportes + liquidez) é o que ficou de lado dos salários.
     """
 
     mes: str
@@ -87,7 +87,7 @@ class Crescimento:
     novas_cent: int
 
     @property
-    def poupanca_cent(self) -> int:
+    def dinheiro_novo_cent(self) -> int:
         return self.aportes_cent + self.liquidez_cent
 
     @property

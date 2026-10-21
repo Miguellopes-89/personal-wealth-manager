@@ -126,6 +126,18 @@ td.num, th.num { text-align: right; }
 .segmentos button[aria-pressed="true"] { background: var(--acento-suave); color: var(--acento); }
 #variacao-periodo { margin-bottom: .75rem; }
 .dica { font-size: .8rem; margin-top: .4rem; }
+.crescimento { margin-top: 1rem; }
+.crescimento h2 { margin: 0; font-size: .95rem; }
+#crescimento-periodo { margin-bottom: .75rem; }
+.crescimento-corpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 1rem 1.5rem; align-items: start; }
+.crescimento-corpo[hidden] { display: none; }
+.partes { margin: 0; display: grid; gap: 1rem; }
+.parte[hidden] { display: none; }
+.parte dt { display: flex; align-items: center; gap: .5rem; font-size: .9rem; color: var(--secundario); }
+.parte dt .cor { width: 10px; height: 10px; border-radius: 3px; }
+.parte dd { margin: .15rem 0 0; }
+.parte strong { display: block; font-size: 1.3rem; font-weight: 600; }
+.moldura-crescimento { height: 260px; }
 .legenda { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .45rem; font-size: .9rem; }
 .legenda li { display: grid; grid-template-columns: 10px 1fr auto auto; gap: .6rem; align-items: center; }
 .legenda .cor { width: 10px; height: 10px; border-radius: 3px; }
@@ -214,6 +226,7 @@ label.opcao { display: flex; gap: .5rem; align-items: center; font-size: .9rem; 
   .heroi { grid-template-columns: 1fr; }
   .heroi .total { font-size: 2.2rem; }
   .graficos { grid-template-columns: 1fr; }
+  .crescimento-corpo { grid-template-columns: 1fr; }
   .conta { grid-template-columns: 1fr 1fr; gap: .35rem .75rem; }
   .conta .saldo { grid-row: 1; grid-column: 2; }
   .heroi .movimento { gap: 1.25rem; }

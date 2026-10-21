@@ -76,6 +76,29 @@
   </section>
 </div>
 
+<section class="caixa crescimento" aria-labelledby="titulo-crescimento">
+  <h2 id="titulo-crescimento">De onde veio o crescimento</h2>
+  <div class="sub" id="crescimento-periodo">Segue o período escolhido na evolução.</div>
+  <div class="crescimento-corpo" id="crescimento-corpo" hidden>
+    <dl class="partes">
+      <div class="parte">
+        <dt><span class="cor" style="background: #1e5a6e"></span>Dinheiro novo</dt>
+        <dd><strong id="cr-novo"></strong><span class="sub" id="cr-novo-det"></span></dd>
+      </div>
+      <div class="parte">
+        <dt><span class="cor" style="background: #7fb069"></span>Rendimento</dt>
+        <dd><strong id="cr-rendimento"></strong><span class="sub" id="cr-rendimento-det"></span></dd>
+      </div>
+      <div class="parte" id="cr-novas-parte" hidden>
+        <dt><span class="cor" style="background: #b9c2cc"></span>Plataformas novas</dt>
+        <dd><strong id="cr-novas"></strong><span class="sub" id="cr-novas-det"></span></dd>
+      </div>
+    </dl>
+    <div class="moldura moldura-crescimento"><canvas id="graf-crescimento" aria-label="Origem da variação de cada mês"></canvas></div>
+  </div>
+  <div class="sub dica">Dinheiro novo = o que ficou de lado dos salários: aportes às plataformas com ganho + variação das contas sem ganho (contas à ordem, numerário, cripto). Os aportes saem das contas à ordem, por isso cada euro conta uma vez só. Rendimento = soma dos ganhos (juros e valorização).</div>
+</section>
+
 {% set cob = painel.cobertura %}
 {% if cob %}
 <h2>Fundo de liberdade</h2>
@@ -177,10 +200,12 @@ const eur = cent => fmt(2).format(cent / 100) + ' €';
 const CORES = {{ CORES|tojson }};
 
 if (typeof Chart === 'undefined') {
-  for (const id of ['graf-evolucao', 'graf-alocacao']) {
+  for (const id of ['graf-evolucao', 'graf-alocacao', 'graf-crescimento']) {
     const canvas = document.getElementById(id);
     if (canvas) canvas.parentElement.innerHTML = '<p class="sub aviso">Biblioteca de gráficos em falta (app/static/vendor/chart.umd.js).</p>';
   }
+  document.getElementById('crescimento-corpo').hidden = false;  // mostra o aviso em vez das partes vazias
+  document.querySelector('.crescimento .partes').hidden = true;
 } else {
   Chart.defaults.font.family = '"Plex", system-ui, sans-serif';
   Chart.defaults.color = '#616b7a';
@@ -213,6 +238,72 @@ if (typeof Chart === 'undefined') {
     }
   });
 
+  // De onde veio o crescimento: as partes de cada mês somam a variação (cêntimos), barras empilhadas por mês.
+  const CR_CORES = { novo: '#1e5a6e', rendimento: '#7fb069', novas: '#b9c2cc' };
+  const comSinal = cent => (cent > 0 ? '+' : cent < 0 ? '−' : '') + eur(Math.abs(cent));
+  const crescimento = new Chart(document.getElementById('graf-crescimento'), {
+    type: 'bar',
+    data: { labels: [], datasets: [] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, border: { display: false }, grid: { color: '#e2e6eb' }, ticks: { callback: v => fmt(0).format(v / 100) + ' €' } }
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 3 } },
+        tooltip: { callbacks: {
+          label: ctx => ctx.dataset.label + ': ' + comSinal(ctx.parsed.y),
+          footer: itens => 'Variação: ' + comSinal(itens.reduce((s, i) => s + i.parsed.y, 0))
+        } }
+      }
+    }
+  });
+  function mostrarCrescimento(inicio) {
+    const texto = document.getElementById('crescimento-periodo');
+    const corpo = document.getElementById('crescimento-corpo');
+    const indices = [];
+    for (let i = inicio + 1; i < dados.crescimento.length; i++) if (dados.crescimento[i]) indices.push(i);
+    if (!indices.length) {
+      corpo.hidden = true;
+      texto.textContent = 'Só há um mês neste período: a origem do crescimento aparece a partir do segundo.';
+      return;
+    }
+    corpo.hidden = false;
+    const soma = campo => indices.reduce((s, i) => s + dados.crescimento[i][campo], 0);
+    const aportes = soma('aportes_cent'), liquidez = soma('liquidez_cent');
+    const novo = aportes + liquidez, rendimento = soma('rendimento_cent'), novas = soma('novas_cent');
+    const total = novo + rendimento + novas;
+    texto.textContent = 'De ' + rotulos[inicio] + ' a ' + rotulos[rotulos.length - 1] + ' o património variou '
+      + comSinal(total) + '.';
+    // Percentagens só quando todas as partes vão no mesmo sentido: com sinais trocados (ex.: rendimento negativo)
+    // uma parte passaria de 100 % e a leitura enganava.
+    const partilha = total > 0 && novo >= 0 && rendimento >= 0 && novas >= 0;
+    const pct = cent => fmt(0).format(cent / total * 100) + ' % do crescimento';
+    const pinta = (id, cent) => {
+      const el = document.getElementById(id);
+      el.textContent = comSinal(cent);
+      el.className = cent > 0 ? 'pos' : cent < 0 ? 'neg' : '';
+    };
+    pinta('cr-novo', novo);
+    pinta('cr-rendimento', rendimento);
+    pinta('cr-novas', novas);
+    document.getElementById('cr-novo-det').textContent = (partilha ? pct(novo) + ' · ' : '')
+      + 'aportes ' + comSinal(aportes) + ' · contas sem ganho ' + comSinal(liquidez);
+    document.getElementById('cr-rendimento-det').textContent = partilha ? pct(rendimento) : 'juros e valorização';
+    document.getElementById('cr-novas-det').textContent = (partilha ? pct(novas) + ' · ' : '') + 'saldo inicial de plataformas registadas depois';
+    const haNovas = indices.some(i => dados.crescimento[i].novas_cent !== 0);
+    document.getElementById('cr-novas-parte').hidden = !haNovas;
+    const serie = (label, cor, valores) => ({ label, data: valores, backgroundColor: cor, borderRadius: 3, maxBarThickness: 36 });
+    crescimento.data.labels = indices.map(i => rotulos[i]);
+    crescimento.data.datasets = [
+      serie('Dinheiro novo', CR_CORES.novo, indices.map(i => dados.crescimento[i].aportes_cent + dados.crescimento[i].liquidez_cent)),
+      serie('Rendimento', CR_CORES.rendimento, indices.map(i => dados.crescimento[i].rendimento_cent))
+    ].concat(haNovas ? [serie('Plataformas novas', CR_CORES.novas, indices.map(i => dados.crescimento[i].novas_cent))] : []);
+    crescimento.update();
+  }
+
   // Filtro do período: "Este ano" (desde o primeiro mês do ano do painel) ou "Desde o início".
   const variacao = document.getElementById('variacao-periodo');
   const botoes = document.querySelectorAll('[data-periodo]');
@@ -222,6 +313,7 @@ if (typeof Chart === 'undefined') {
     evolucao.data.datasets.forEach((d, i) => { d.data = series[i].valores.slice(inicio); });
     evolucao.update();
     botoes.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.periodo === periodo)));
+    mostrarCrescimento(inicio);
     const total = dados.total_cent.slice(inicio);
     if (total.length < 2) {
       variacao.textContent = 'Só há um mês neste período: a variação aparece a partir do segundo.';
