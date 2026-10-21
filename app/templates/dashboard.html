@@ -81,7 +81,7 @@
     <div class="sub">Define a despesa mensal de referência para ver quantos meses o fundo cobre.</div>
     {% endif %}
   </div>
-  <form method="post" action="/configuracao/despesa-mensal" class="linha-form">
+  <form method="post" action="/configuracao/despesa-mensal" class="linha-form" data-avisar-sair{% if erro_despesa %} data-por-gravar{% endif %}>
     <label>Despesa mensal de referência (€)
       <input type="text" inputmode="decimal" name="despesa_mensal" value="{{ despesa_texto }}"{% if erro_despesa %} class="erro"{% endif %}>
     </label>

@@ -28,7 +28,7 @@
 </div>
 
 <h2>{% if editar %}Editar {{ editar.nome }}{% else %}Nova plataforma{% endif %}</h2>
-<form class="caixa formulario" method="post" action="{% if editar %}/plataformas/{{ editar.id }}{% else %}/plataformas{% endif %}">
+<form class="caixa formulario" method="post" action="{% if editar %}/plataformas/{{ editar.id }}{% else %}/plataformas{% endif %}" data-avisar-sair{% if erros %} data-por-gravar{% endif %}>
   <div class="grelha">
     <label class="campo">Nome
       <input type="text" name="nome" value="{{ form.nome or '' }}" required{% if erros.nome %} class="erro"{% endif %}>

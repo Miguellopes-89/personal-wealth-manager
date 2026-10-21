@@ -42,7 +42,7 @@
 {% endif %}
 {% endif %}
 
-<form method="post" action="/checkin">
+<form method="post" action="/checkin" data-avisar-sair{% if por_gravar %} data-por-gravar{% endif %}>
   <input type="hidden" name="mes" value="{{ mes }}">
   <input type="hidden" name="data" value="{{ data_leitura }}">
   <div class="tabela">
@@ -142,19 +142,6 @@
       const valor = parseInt(caixa.dataset.valor, 10);
       aporte.value = paraTexto(atual + (caixa.checked ? valor : -valor));
     });
-  });
-})();
-// "Guardar e sair" (na barra lateral) grava a cópia de segurança, não o check-in: avisa se há valores escritos e por gravar.
-(() => {
-  const campos = [...document.querySelectorAll('input[name^="saldo_"], input[name^="aporte_"]')];
-  const caixas = [...document.querySelectorAll('input[name^="domingo_"]')];
-  const iniciais = new Map(campos.map(c => [c, c.value]));
-  const marcadas = new Map(caixas.map(c => [c, c.checked]));
-  document.getElementById('form-sair').addEventListener('submit', ev => {
-    const porGravar = campos.some(c => c.value !== iniciais.get(c)) || caixas.some(c => c.checked !== marcadas.get(c));
-    if (porGravar && !confirm('Há valores escritos que ainda não foram gravados. Sair mesmo assim? (Perdem-se.)')) {
-      ev.preventDefault();
-    }
   });
 })();
 </script>

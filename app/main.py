@@ -154,6 +154,7 @@ def _contexto(conn, mes, data_leitura, valores=None, erros=None, resultado=None,
         "resultado": resultado,
         "avisos": AVISOS,
         "erro_geral": erro_geral,
+        "por_gravar": bool(erros),  # voltou de um erro: os valores no ecrã não estão gravados
     }
 
 

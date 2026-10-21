@@ -31,6 +31,33 @@
 {% block conteudo %}{% endblock %}
   </main>
 </div>
+<script>
+// "Guardar e sair" faz a cópia de segurança e fecha a aplicação, mas não grava formulários.
+// Avisa se algum formulário marcado com data-avisar-sair tem valores diferentes dos que vieram da base
+// (defaultValue/defaultChecked = o que o servidor escreveu na página) ou se veio de um erro
+// (data-por-gravar: o que lá está foi escrito mas não gravado).
+(() => {
+  const sair = document.getElementById('form-sair');
+  if (!sair) return;
+  const alterado = el => {
+    if (el.type === 'checkbox' || el.type === 'radio') return el.checked !== el.defaultChecked;
+    if (el.tagName === 'SELECT') {
+      const original = [...el.options].findIndex(o => o.defaultSelected);
+      return el.selectedIndex !== (original < 0 ? 0 : original);
+    }
+    if (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') return false;
+    if (['hidden', 'submit', 'button', 'reset'].includes(el.type)) return false;
+    return el.value !== el.defaultValue;
+  };
+  sair.addEventListener('submit', ev => {
+    const porGravar = [...document.querySelectorAll('form[data-avisar-sair]')]
+      .some(f => f.hasAttribute('data-por-gravar') || [...f.elements].some(alterado));
+    if (porGravar && !confirm('Há valores escritos que ainda não foram gravados. Sair mesmo assim? (Perdem-se.)')) {
+      ev.preventDefault();
+    }
+  });
+})();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
