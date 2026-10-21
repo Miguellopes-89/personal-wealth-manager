@@ -4,7 +4,7 @@ Histórico das alterações relevantes ao código, uma entrada por commit (ou po
 Serve para quem lê o repositório sem ter estado na sessão perceber o que mudou e porquê.
 O que não foi verificado está marcado como "por confirmar".
 
-Versão atual do esquema da base: **4** (`SCHEMA_VERSION` em `app/db.py`).
+Versão atual do esquema da base: **5** (`SCHEMA_VERSION` em `app/db.py`).
 
 | Versão | Mudança | Migração |
 |---|---|---|
@@ -12,6 +12,49 @@ Versão atual do esquema da base: **4** (`SCHEMA_VERSION` em `app/db.py`).
 | 2 | Coluna `registos_mensais.data_leitura` (AAAA-MM-DD, pode ser NULL) | `ALTER TABLE` em `_migrar` |
 | 3 | Tabela `configuracao (chave TEXT PK, valor INTEGER)` | `CREATE TABLE IF NOT EXISTS` no arranque |
 | 4 | Tabela `depositos_desafio (plataforma_id, domingo, valor_cent, mes)` | `CREATE TABLE IF NOT EXISTS` no arranque |
+| 5 | Tabela `categorias (codigo PK, nome UNIQUE NOCASE, cor, ordem)`; `plataformas.categoria` passa de `CHECK` fixo a `REFERENCES categorias(codigo)` | Categorias de origem inseridas se a versão era < 5; tabela `plataformas` refeita em `_reconstruir_plataformas` (mesmos ids, transação, `foreign_keys` desligadas na troca e verificadas no fim) |
+
+---
+
+## Sessão 21/10/2026 — categorias-editaveis-pwm
+Commits `07f14ca` (esquema) e seguinte (ecrã) · 425 testes (+38)
+
+**Pedido:** poder acrescentar categorias (ex.: uma futura conta de rendimento de um side hustle). Escolhida a
+opção A de três (A: lista editável numa tabela; B: texto livre com sugestões; C: acrescentar à lista fixa só
+quando for preciso). Texto livre puro recusado: as categorias agrupam a alocação e a evolução e definem o fundo
+de liberdade, e "Poupança"/"poupanca" passariam a ser duas categorias.
+
+**Esquema v5** (`app/db.py`, `07f14ca`)
+- Tabela `categorias`. O `codigo` é interno e nunca muda; o `nome` é o do ecrã. `db.CATEGORIAS_BASE` guarda as
+  10 de origem (código, nome, cor); só são inseridas quando a versão da base era < 5, para uma categoria de
+  origem apagada na app não voltar no arranque seguinte.
+- `plataformas.categoria` liga-se a `categorias(codigo)` com `ON DELETE RESTRICT`. A migração reconhece a tabela
+  antiga pela **falta** dessa ligação (não pela presença do `CHECK`, que as primeiras bases nem tinham) e refá-la.
+  Se alguma plataforma tiver uma categoria fora da lista, aborta com `RuntimeError` e desfaz a troca.
+- Backup: `categorias.csv` (primeiro em `backup.TABELAS`, por causa da ligação). Restauro: se a cópia tem o CSV,
+  apagam-se as categorias de origem da base nova antes de carregar; cópias antigas sem ele ficam com as de origem
+  (as únicas que existiam até à v4). **A primeira cópia depois do pull cria uma pasta nova** (passa a ter
+  `categorias.csv`), uma vez, como na v3 e na v4.
+- Testes: `tests/test_migracao.py` (+6) com o esquema exato da v4 em `tests/esquema_v4.sql`.
+
+**Categorias no ecrã** (`app/categorias.py` novo, `main.py`, `plataformas.html`, `dashboard.py`, `checkin.py`)
+- Secção "Categorias" no fim de `/plataformas`: renomear e apagar em cada linha, e criar uma nova. Rotas
+  `POST /categorias`, `POST /categorias/{codigo}` e `POST /categorias/{codigo}/apagar`, com backup depois de cada.
+- Regras: nome sem espaços a mais, até 40 caracteres; repetidos recusados comparando sem maiúsculas, acentos nem
+  símbolos; código novo tirado do nome (com sufixo `_2` se estiver ocupado); cor nova da lista `CORES_NOVAS`
+  (a primeira livre); fica no fim da ordem. Só se apaga sem plataformas (inativas incluídas); `emergencia` nunca.
+- O painel, o check-in e o formulário de plataformas leem nomes, cores e ordem da base: saíram
+  `dashboard.ROTULOS_CATEGORIA`, o filtro Jinja `categoria` e as cores fixas do `dashboard.html`.
+- `plataformas.validar(form, categorias_validas)`: a web passa os códigos da base; sem eles valem os de origem.
+- Os formulários das categorias entram no aviso do "Guardar e sair" (`data-avisar-sair`). A página desce para a
+  secção depois de criar, renomear ou apagar, e com erro.
+- Limite conhecido: criar uma categoria a meio de editar uma plataforma recarrega a página e perde o que estava
+  escrito nessa plataforma (o ecrã diz para gravar primeiro). Não há forma de mudar a ordem nem a cor no ecrã.
+
+**Verificado:** base criada pelo código da v4 (`ecfd01b`) com o `seed_demo`, aberta pelo código novo: versão 5,
+dados das 5 tabelas iguais, `foreign_key_check` vazio, `integrity_check` ok; painel, check-in e plataformas sem
+erro; categoria criada, atribuída a uma plataforma e visível no painel (com a cor nova) e no check-in.
+**Por confirmar no ecrã:** o aspeto da secção "Categorias" (sem Chromium na cloud nesta sessão).
 
 ---
 

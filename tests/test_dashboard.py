@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-from app import calc, configuracao, dashboard, db, planos
+from app import calc, categorias, configuracao, dashboard, db, planos
 from app.main import app
 
 HOJE = date(2026, 10, 19)  # segunda-feira; o último domingo foi 18/10 (42.º de 2026)
@@ -44,8 +44,11 @@ def _cartao(painel, nome):
     return next(c for c in painel.cartoes if c.nome == nome)
 
 
-def test_todas_as_categorias_tem_rotulo():
-    assert set(dashboard.ROTULOS_CATEGORIA) == set(db.CATEGORIAS)
+def test_todas_as_categorias_de_origem_tem_rotulo_e_cor_unicos():
+    codigos = [c for c, _, _ in db.CATEGORIAS_BASE]
+    assert len(set(codigos)) == len(codigos) == len(db.CATEGORIAS)
+    assert len({n for _, n, _ in db.CATEGORIAS_BASE}) == len(codigos)
+    assert len({cor for _, _, cor in db.CATEGORIAS_BASE}) == len(codigos)
 
 
 def test_total_do_desafio_e_1378_euros():
@@ -379,9 +382,10 @@ def test_static_inexistente_da_404_e_a_pagina_continua_a_funcionar(cliente):
     assert cliente.get("/static/vendor/nao-existe.js").status_code == 404
 
 
-def test_categoria_emergencia_aparece_como_fundo_de_liberdade():
-    assert dashboard.ROTULOS_CATEGORIA["emergencia"] == "Fundo de liberdade"
-    assert not any("emergência" in r.lower() for r in dashboard.ROTULOS_CATEGORIA.values())
+def test_categoria_emergencia_aparece_como_fundo_de_liberdade(conn):
+    rotulos = categorias.rotulos(conn)
+    assert rotulos[dashboard.CATEGORIA_FUNDO] == "Fundo de liberdade"
+    assert not any("emergência" in r.lower() for r in rotulos.values())
 
 
 def test_painel_mostra_meses_como_mm_aaaa(cliente):

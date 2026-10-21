@@ -14,7 +14,7 @@
   {% for p in lista %}
     <tr class="{{ '' if p.ativa else 'inativa' }}{% if editar and p.id == editar.id %} a-editar{% endif %}">
       <td>{{ p.nome }}<div class="sub">{{ p.titular }}{% if p.finalidade %} · {{ p.finalidade }}{% endif %}{% if not p.ativa %} · inativa{% endif %}</div></td>
-      <td>{{ dict(categorias).get(p.categoria, p.categoria) }}</td>
+      <td>{{ rotulos.get(p.categoria, p.categoria) }}</td>
       <td class="num">{% if p.desafio_inicio %}Desafio 52 sem.{% elif p.plano_mensal_cent %}{{ p.plano_mensal_cent|eur }}{% else %}—{% endif %}</td>
       <td>{{ 'sim' if p.calcula_ganho else 'não' }} · {{ 'sim' if p.entra_alocacao else 'não' }}</td>
       <td>{{ p.n_registos }}{% if p.ultimo_mes %} <span class="sub">(último {{ p.ultimo_mes|mes }})</span>{% endif %}</td>
@@ -37,9 +37,10 @@
     <label class="campo">Categoria
       <select name="categoria"{% if erros.categoria %} class="erro"{% endif %}>
         <option value="">—</option>
-        {% for valor, rotulo in categorias %}<option value="{{ valor }}"{% if form.categoria == valor %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+        {% for c in categorias %}<option value="{{ c.codigo }}"{% if form.categoria == c.codigo %} selected{% endif %}>{{ c.nome }}</option>{% endfor %}
       </select>
       {% if erros.categoria %}<span class="msg-erro">{{ erros.categoria }}</span>{% endif %}
+      <span class="sub">Falta uma? Cria-a em <a href="#categorias">Categorias</a>, mais abaixo (grava primeiro o que escreveste aqui).</span>
     </label>
     <label class="campo">Titular
       <input type="text" name="titular" value="{{ form.titular or '' }}" required{% if erros.titular %} class="erro"{% endif %}>
@@ -96,10 +97,37 @@
   {% endif %}
 </div>
 {% endif %}
-{% if erros %}
+<h2 id="categorias">Categorias</h2>
+<section class="caixa categorias">
+  {% if msg_categorias %}<div class="banner ok">{{ msg_categorias }}</div>{% endif %}
+  <p class="sub">O nome é o que aparece no painel e no check-in. Renomear não mexe no histórico. Só se apaga uma
+    categoria sem plataformas; o fundo de liberdade nunca se apaga, porque é a base da cobertura em meses.</p>
+  <ul class="lista-categorias">
+  {% for c in categorias %}
+    <li>
+      <form method="post" action="/categorias/{{ c.codigo }}" class="linha-categoria" data-avisar-sair{% if erros_categorias.get(c.codigo) %} data-por-gravar{% endif %}>
+        <span class="cor" style="background: {{ c.cor }}"></span>
+        <input type="text" name="nome" value="{{ nomes_categorias.get(c.codigo, c.nome) }}" maxlength="40" required aria-label="Nome da categoria"{% if erros_categorias.get(c.codigo) %} class="erro"{% endif %}>
+        <span class="sub">{{ c.n_plataformas }} plataforma{{ '' if c.n_plataformas == 1 else 's' }}{% if c.protegida %} · base do fundo de liberdade{% endif %}</span>
+        <button type="submit" class="secundario">Renomear</button>
+        {% if not c.protegida and not c.n_plataformas %}<button type="submit" class="perigo" formaction="/categorias/{{ c.codigo }}/apagar" formnovalidate>Apagar</button>{% endif %}
+      </form>
+      {% if erros_categorias.get(c.codigo) %}<span class="msg-erro">{{ erros_categorias[c.codigo] }}</span>{% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+  <form method="post" action="/categorias" class="linha-categoria nova" data-avisar-sair{% if erros_categorias.nova %} data-por-gravar{% endif %}>
+    <input type="text" name="nome" value="{{ nomes_categorias.get('nova', '') }}" maxlength="40" required placeholder="Nova categoria (ex.: Rendimento extra)" aria-label="Nome da nova categoria"{% if erros_categorias.nova %} class="erro"{% endif %}>
+    <button type="submit">Criar categoria</button>
+  </form>
+  {% if erros_categorias.nova %}<span class="msg-erro">{{ erros_categorias.nova }}</span>{% endif %}
+</section>
+
+{% if saltar_para %}
 <script>
-  // Ecrã devolvido com erros num campo: o endereço não leva #formulario, por isso salta-se para lá.
-  document.getElementById("formulario").scrollIntoView();
+  // Ecrã devolvido por um POST (erro num campo, ou categoria criada/renomeada/apagada): o endereço não leva
+  // âncora, por isso desce-se até à secção certa.
+  document.getElementById("{{ saltar_para }}").scrollIntoView();
 </script>
 {% endif %}
 {% endblock %}

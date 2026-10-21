@@ -14,6 +14,7 @@ Regras:
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -47,8 +48,11 @@ class Validacao:
         return not self.erros
 
 
-def validar(form: dict[str, str]) -> Validacao:
-    """Valida o formulário (textos crus). Checkboxes: presentes = marcadas."""
+def validar(form: dict[str, str], categorias_validas: Iterable[str] | None = None) -> Validacao:
+    """Valida o formulário (textos crus). Checkboxes: presentes = marcadas.
+
+    `categorias_validas`: os códigos da tabela categorias (a web passa os da base); por defeito, os de origem.
+    """
     erros: dict[str, str] = {}
     nome = (form.get("nome") or "").strip()
     titular = (form.get("titular") or "").strip()
@@ -57,7 +61,7 @@ def validar(form: dict[str, str]) -> Validacao:
         erros["nome"] = "Indica o nome"
     if not titular:
         erros["titular"] = "Indica o titular"
-    if categoria not in db.CATEGORIAS:
+    if categoria not in (db.CATEGORIAS if categorias_validas is None else set(categorias_validas)):
         erros["categoria"] = "Escolhe uma categoria"
 
     plano = 0

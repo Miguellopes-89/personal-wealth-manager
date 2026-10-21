@@ -33,6 +33,9 @@ As capturas usam os dados fictícios da demonstração (ver abaixo).
   52 semanas). Só se desativa uma conta fechada: primeiro grava-se no check-in o saldo 0, com o levantamento
   como aporte negativo (e o mesmo valor como aporte no destino). O histórico fica no painel. Só se apaga uma
   plataforma sem registos.
+- **Categorias** (no mesmo ecrã): criar, renomear e apagar. Renomear não mexe no histórico; nomes iguais sem
+  contar maiúsculas nem acentos são recusados; só se apaga uma categoria sem plataformas, e a do fundo de
+  liberdade nunca se apaga (é a base da cobertura em meses).
 - **Ganho do mês** = saldo − saldo do mês anterior − aporte. Plataformas como contas correntes ou
   numerário (onde salários e transferências não são lucro) ficam só com saldo, sem ganho.
 - **Avisos**: ganho negativo e mês em falta.

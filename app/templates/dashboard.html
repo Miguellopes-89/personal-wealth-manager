@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block titulo %}Painel{% endblock %}
-{% set CORES = {
-  'conta_corrente': '#8a94a0', 'transito': '#b8c0c8', 'emergencia': '#e0a030', 'viagens': '#2fa4c9', 'p2p': '#7a5bd6',
-  'investimento': '#2e8b57', 'poupanca': '#d2692e', 'reforma': '#2f5fb3', 'numerario': '#a98467', 'cripto': '#c0508a'
-} %}
+{# Cores das categorias: vêm da base (tabela categorias, esquema v5), também as das categorias criadas na app.
+   Fora dos blocos, para o bloco dos scripts também as ver. #}
+{% set CORES = {} %}
+{% if painel %}{% for c in painel.categorias %}{% set _ = CORES.update({c.codigo: c.cor}) %}{% endfor %}{% endif %}
 {% block conteudo %}
 {% if not painel %}
 <div class="cabecalho"><h1>Painel</h1></div>
@@ -101,7 +101,7 @@
 
 <h2>Plataformas</h2>
 <section class="caixa contas">
-{% for cat, rotulo in rotulos.items() %}
+{% for categoria in painel.categorias %}{% set cat, rotulo = categoria.codigo, categoria.nome %}
 {% set contas = painel.cartoes|selectattr('categoria', 'equalto', cat)|list %}
 {% if contas %}
 {% set soma = namespace(v=0) %}

@@ -23,22 +23,9 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import date
 
-from app import calc, checkin, configuracao, db, planos
+from app import calc, categorias, checkin, configuracao, planos
 
-ROTULOS_CATEGORIA = {
-    "conta_corrente": "Conta corrente",
-    "transito": "Trânsito",
-    "emergencia": "Fundo de liberdade",
-    "viagens": "Viagens",
-    "p2p": "P2P",
-    "investimento": "Investimento",
-    "poupanca": "Poupança",
-    "reforma": "Reforma",
-    "numerario": "Numerário",
-    "cripto": "Cripto",
-}
-
-CATEGORIA_FUNDO = "emergencia"  # código interno; no ecrã é o "Fundo de liberdade"
+CATEGORIA_FUNDO = categorias.CATEGORIA_FUNDO  # código interno; no ecrã, por defeito, "Fundo de liberdade"
 
 TOTAL_DESAFIO_CENT = 100 * sum(range(1, planos.SEMANAS_DO_DESAFIO + 1))  # 1.378,00 €
 
@@ -141,6 +128,7 @@ class Painel:
     alocacao: tuple[FatiaAlocacao, ...]
     desafios: tuple[ProgressoDesafio, ...]
     cobertura: Cobertura | None = None  # None se não há plataformas da categoria do fundo de liberdade
+    categorias: tuple[categorias.Categoria, ...] = ()  # pela ordem do ecrã: nomes e cores (esquema v5)
 
 
 def _meses_entre(primeiro: str, ultimo: str) -> list[str]:
@@ -205,6 +193,8 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
     ):
         inicio_desafio.setdefault(linha["plataforma_id"], checkin.ler_data(linha["data_inicio"]))
 
+    lista_categorias = tuple(categorias.listar(conn))
+    rotulos = {c.codigo: c.nome for c in lista_categorias}
     saldos = {p["id"]: _saldos_por_mes(registos[p["id"]], meses, bool(p["ativa"])) for p in todas}
 
     # Evolução: patrimónios por categoria e por mês (inativas incluídas até ao último registo)
@@ -214,8 +204,8 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
         for i, saldo in enumerate(saldos[p["id"]]):
             acumulado[i] += saldo or 0
     evolucao = tuple(
-        SerieCategoria(c, ROTULOS_CATEGORIA.get(c, c), tuple(por_categoria[c]))
-        for c in db.CATEGORIAS
+        SerieCategoria(c, rotulos[c], tuple(por_categoria[c]))
+        for c in rotulos
         if c in por_categoria
     )
     total_por_mes = [sum(valores[i] for valores in por_categoria.values()) for i in range(len(meses))]
@@ -276,8 +266,8 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
             por_categoria_alocacao[p["categoria"]] = por_categoria_alocacao.get(p["categoria"], 0) + saldo
     total_alocacao = sum(por_categoria_alocacao.values())
     alocacao = tuple(
-        FatiaAlocacao(c, ROTULOS_CATEGORIA.get(c, c), por_categoria_alocacao[c], por_categoria_alocacao[c] * 100 / total_alocacao)
-        for c in db.CATEGORIAS
+        FatiaAlocacao(c, rotulos[c], por_categoria_alocacao[c], por_categoria_alocacao[c] * 100 / total_alocacao)
+        for c in rotulos
         if c in por_categoria_alocacao
     )
 
@@ -307,6 +297,7 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
         alocacao=alocacao,
         desafios=tuple(desafios),
         cobertura=cobertura,
+        categorias=lista_categorias,
     )
 
 

@@ -180,7 +180,15 @@ label.domingo .aviso { display: inline; margin-left: .3rem; }
 /* ---------- Plataformas ---------- */
 tr.inativa td { color: #8f98a5; }
 tr.a-editar td { background: #e6f0f1; }
-#formulario { scroll-margin-top: 16px; }
+#formulario, #categorias { scroll-margin-top: 16px; }
+.lista-categorias { list-style: none; margin: 0 0 12px; padding: 0; }
+.lista-categorias li { padding: 6px 0; border-bottom: 1px solid #eef0f3; }
+.lista-categorias li:last-child { border-bottom: 0; }
+.linha-categoria { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.linha-categoria input[type=text] { flex: 1 1 200px; max-width: 320px; }
+.linha-categoria .sub { flex: 1 1 140px; }
+.linha-categoria.nova { margin-top: 4px; }
+.linha-categoria .cor { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 .grelha { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .9rem 1.1rem; }
 label.campo { display: flex; flex-direction: column; gap: .3rem; font-size: .9rem; font-weight: 500; }
 label.opcao { display: flex; gap: .5rem; align-items: center; font-size: .9rem; margin: .45rem 0; flex-wrap: wrap; }

@@ -61,7 +61,7 @@
       <tr>
         <td>
           <strong style="font-weight: 500">{{ l.nome }}</strong>
-          <div class="sub">{{ l.categoria|categoria }} · {{ l.titular }}{% if not l.calcula_ganho %} · só saldo{% endif %}{% if l.registado %} · já registado{% endif %}</div>
+          <div class="sub">{{ l.categoria_nome or l.categoria }} · {{ l.titular }}{% if not l.calcula_ganho %} · só saldo{% endif %}{% if l.registado %} · já registado{% endif %}</div>
           {% if item.erro %}<div class="msg-erro">{{ item.erro }}</div>{% endif %}
         </td>
         <td class="num ref" data-rotulo="Mês anterior">

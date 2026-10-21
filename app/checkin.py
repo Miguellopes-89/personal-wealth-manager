@@ -47,6 +47,7 @@ class Linha:
     sugestao: planos.Sugestao | None = None  # aporte sugerido por um plano semanal
     nota_plano: str | None = None  # porque não há sugestão, quando devia haver
     domingos_marcados: frozenset[date] = frozenset()  # caixas a mostrar marcadas
+    categoria_nome: str = ""  # nome da categoria no ecrã (tabela categorias, esquema v5)
 
 
 @dataclass(frozen=True)
@@ -200,8 +201,9 @@ def linhas_checkin(conn: sqlite3.Connection, mes: str, data_leitura: date | None
     """
     calc.mes_para_indice(mes)
     plataformas = conn.execute(
-        """SELECT id, nome, categoria, titular, plano_mensal_cent, calcula_ganho
-           FROM plataformas WHERE ativa = 1 ORDER BY ordem, id"""
+        """SELECT p.id, p.nome, p.categoria, c.nome AS categoria_nome, p.titular, p.plano_mensal_cent, p.calcula_ganho
+           FROM plataformas p JOIN categorias c ON c.codigo = p.categoria
+           WHERE p.ativa = 1 ORDER BY p.ordem, p.id"""
     ).fetchall()
 
     linhas: list[Linha] = []
@@ -234,6 +236,7 @@ def linhas_checkin(conn: sqlite3.Connection, mes: str, data_leitura: date | None
                 plataforma_id=p["id"],
                 nome=p["nome"],
                 categoria=p["categoria"],
+                categoria_nome=p["categoria_nome"],
                 titular=p["titular"],
                 calcula_ganho=bool(p["calcula_ganho"]),
                 mes_anterior=anterior["mes"] if anterior else None,

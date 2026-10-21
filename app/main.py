@@ -13,12 +13,11 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import backup, calc, checkin, configuracao, dashboard, db, plataformas
+from app import backup, calc, categorias, checkin, configuracao, dashboard, db, plataformas
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["eur"] = calc.formatar_euros
 templates.env.filters["mes"] = calc.formatar_mes
-templates.env.filters["categoria"] = lambda c: dashboard.ROTULOS_CATEGORIA.get(c, c)
 
 AVISOS = {
     calc.AVISO_GANHO_NEGATIVO: "Ganho negativo: confirma o saldo e o aporte (erro de registo ou perda real).",
@@ -71,7 +70,6 @@ def _ecra_painel(request: Request, conn, *, despesa_texto=None, erro_despesa=Non
         "painel": painel,
         "dados": dashboard.dados_graficos(painel) if painel else None,
         "avisos": AVISOS,
-        "rotulos": dashboard.ROTULOS_CATEGORIA,
         "despesa_texto": despesa_texto,
         "erro_despesa": erro_despesa,
         "msg": msg,
@@ -268,8 +266,13 @@ def _backup_depois_de_mudar(conn) -> str | None:
 
 
 def _ecra_plataformas(request: Request, conn, *, editar=None, form=None, erros=None, msg=None, erro_geral=None,
-                      aviso_backup=None, status_code=200):
-    """Lista de plataformas + formulário (novo ou edição de `editar`). `form`: textos já escritos."""
+                      aviso_backup=None, status_code=200, erros_categorias=None, nomes_categorias=None,
+                      msg_categorias=None, saltar_para=None):
+    """Lista de plataformas + formulário (novo ou edição de `editar`) + categorias. `form`: textos já escritos.
+
+    `erros_categorias` / `nomes_categorias`: por código (ou "nova"), o erro e o nome escrito numa categoria.
+    `saltar_para`: id da secção para onde a página desce ao abrir (o endereço de um POST não leva âncora).
+    """
     if form is None:
         if editar is not None:
             form = {
@@ -282,10 +285,15 @@ def _ecra_plataformas(request: Request, conn, *, editar=None, form=None, erros=N
         else:
             form = {"calcula_ganho": "1", "entra_alocacao": "1", "ordem": str(plataformas.proxima_ordem(conn)),
                     "plano_mensal": "0,00", "desafio_inicio": f"{date.today().year}-01-01"}
+    lista_categorias = categorias.listar(conn)
+    if saltar_para is None and erros:
+        saltar_para = "formulario"
     contexto = {
         "lista": plataformas.listar(conn), "editar": editar, "form": form, "erros": erros or {},
         "msg": msg, "erro_geral": erro_geral, "aviso_backup": aviso_backup,
-        "categorias": [(c, dashboard.ROTULOS_CATEGORIA[c]) for c in db.CATEGORIAS],
+        "categorias": lista_categorias, "rotulos": {c.codigo: c.nome for c in lista_categorias},
+        "erros_categorias": erros_categorias or {}, "nomes_categorias": nomes_categorias or {},
+        "msg_categorias": msg_categorias, "saltar_para": saltar_para,
         "ultimo": plataformas.ultimo_saldo(conn, editar["id"]) if editar is not None else None,
     }
     return templates.TemplateResponse(request, "plataformas.html", contexto, status_code=status_code)
@@ -309,7 +317,7 @@ async def plataformas_criar(request: Request):
     form = _form_texto(await request.form())
     conn = db.connect()
     try:
-        v = plataformas.validar(form)
+        v = plataformas.validar(form, categorias.codigos(conn))
         if not v.ok:
             return _ecra_plataformas(request, conn, form=form, erros=v.erros,
                                      erro_geral="Nada foi gravado: corrige os campos assinalados.", status_code=422)
@@ -349,7 +357,7 @@ async def plataforma_atualizar(request: Request, plataforma_id: int):
         p, erro = _obter_ou_404(request, conn, plataforma_id)
         if erro:
             return erro
-        v = plataformas.validar(form)
+        v = plataformas.validar(form, categorias.codigos(conn))
         if not v.ok:
             return _ecra_plataformas(request, conn, editar=p, form=form, erros=v.erros,
                                      erro_geral="Nada foi gravado: corrige os campos assinalados.", status_code=422)
@@ -387,5 +395,63 @@ def plataforma_acao(request: Request, plataforma_id: int, acao: str):
             return _ecra_plataformas(request, conn, editar=p, erro_geral=str(exc), status_code=422)
         aviso = _backup_depois_de_mudar(conn)
         return _ecra_plataformas(request, conn, msg=msg, aviso_backup=aviso)
+    finally:
+        conn.close()
+
+
+# --- Categorias (esquema v5): criam-se, renomeiam-se e apagam-se no ecrã das plataformas --------------------
+
+def _depois_de_categoria(request: Request, conn, msg: str):
+    aviso = _backup_depois_de_mudar(conn)
+    return _ecra_plataformas(request, conn, msg_categorias=msg, aviso_backup=aviso, saltar_para="categorias")
+
+
+def _erro_categoria(request: Request, conn, chave: str, nome: str, erro: str, status_code: int = 422):
+    return _ecra_plataformas(request, conn, erros_categorias={chave: erro}, nomes_categorias={chave: nome},
+                             saltar_para="categorias", status_code=status_code)
+
+
+@app.post("/categorias", response_class=HTMLResponse)
+async def categoria_criar(request: Request):
+    nome = str((await request.form()).get("nome") or "")
+    conn = db.connect()
+    try:
+        try:
+            categorias.criar(conn, nome)
+        except ValueError as exc:
+            return _erro_categoria(request, conn, "nova", nome, str(exc))
+        return _depois_de_categoria(request, conn, f"Categoria {' '.join(nome.split())!r} criada: já a podes escolher nas plataformas.")
+    finally:
+        conn.close()
+
+
+@app.post("/categorias/{codigo}", response_class=HTMLResponse)
+async def categoria_renomear(request: Request, codigo: str):
+    nome = str((await request.form()).get("nome") or "")
+    conn = db.connect()
+    try:
+        try:
+            categorias.renomear(conn, codigo, nome)
+        except LookupError as exc:
+            return _ecra_plataformas(request, conn, erro_geral=f"{exc}.", status_code=404)
+        except ValueError as exc:
+            return _erro_categoria(request, conn, codigo, nome, str(exc))
+        return _depois_de_categoria(request, conn, f"Categoria renomeada para {' '.join(nome.split())!r}.")
+    finally:
+        conn.close()
+
+
+@app.post("/categorias/{codigo}/apagar", response_class=HTMLResponse)
+def categoria_apagar(request: Request, codigo: str):
+    conn = db.connect()
+    try:
+        nome = categorias.rotulos(conn).get(codigo, codigo)
+        try:
+            categorias.apagar(conn, codigo)
+        except LookupError as exc:
+            return _ecra_plataformas(request, conn, erro_geral=f"{exc}.", status_code=404)
+        except ValueError as exc:
+            return _erro_categoria(request, conn, codigo, nome, str(exc))
+        return _depois_de_categoria(request, conn, f"Categoria {nome!r} apagada.")
     finally:
         conn.close()
