@@ -14,6 +14,21 @@ Versão atual do esquema da base: **3** (`SCHEMA_VERSION` em `app/db.py`).
 
 ---
 
+## Sessão 21/10/2026 — registo-tecnico-retroativo-e-claude-md
+Commits `a9b43c9` e `792ed71` · 324 testes (sem alterações ao código)
+
+**O que mudou:** criados `CLAUDE.md` (regras permanentes das sessões, sem dados pessoais) e este
+`docs/registo-tecnico.md`, preenchido a partir do código e do histórico Git para os commits 8a4a9dc a 0e71688.
+
+**Ficheiros:** `CLAUDE.md` (novo), `docs/registo-tecnico.md` (novo).
+
+**Decisões:** o registo fica no repositório para a conta que acompanha o projeto o poder ler via GitHub.
+A explicação da cópia de 20/10 foi verificada por simulação, não com os ficheiros reais.
+
+**Esquema:** sem alterações (versão 3).
+
+---
+
 ## 0e71688 — Revisão: limites de valores e caminho da base resolvido
 19/10/2026 · 324 testes (+9)
 
