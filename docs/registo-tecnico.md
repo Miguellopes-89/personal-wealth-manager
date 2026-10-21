@@ -14,6 +14,28 @@ Versão atual do esquema da base: **3** (`SCHEMA_VERSION` em `app/db.py`).
 
 ---
 
+## Sessão 21/10/2026 — novo-modelo-de-trabalho-pwm
+324 testes (sem alterações ao código)
+
+**O que mudou:** o modelo de trabalho. O Claude Code passa a ser o responsável principal pela arquitetura
+e pela programação; desenvolve num clone na cloud e faz push para `main`. A app passa a correr com os dados
+reais num computador Windows novo, cuja pasta do projeto é um clone Git que só recebe `git pull --ff-only`.
+O computador antigo (pasta no OneDrive) deixa de fazer parte do fluxo depois da migração dos dados.
+
+**Ficheiros:** `CLAUDE.md` (secção "Modelo de trabalho"; início e fim da sessão ajustados).
+
+**Decisões:**
+- O `estado-projeto.md` continua fora do Git (dados pessoais), mas passa a viver na pasta do projeto do
+  computador do dono; o Claude lê-o e atualiza-o pela ligação ao computador, em vez de copiar e colar.
+- A recusa de bases no OneDrive mantém-se: não custa nada e protege contra corrupção por sincronização.
+- Migração dos dados: copiar a pasta de cópia de segurança mais recente para `backup\` do novo clone e
+  correr `python -m app.restauro --destino "%LOCALAPPDATA%\pwm\pwm.db"` (o restauro nunca sobrescreve,
+  por isso só funciona enquanto essa base não existir).
+
+**Esquema:** sem alterações (versão 3).
+
+---
+
 ## Sessão 21/10/2026 — registo-tecnico-retroativo-e-claude-md
 Commits `a9b43c9` e `792ed71` · 324 testes (sem alterações ao código)
 
