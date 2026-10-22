@@ -26,7 +26,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import date
 
-from app import calc, planos
+from app import calc, indices, planos
 
 
 @dataclass(frozen=True)
@@ -73,10 +73,12 @@ class Resultado:
     gravados: tuple[Gravado, ...] = ()
     erros: dict[int, str] = field(default_factory=dict)  # plataforma_id -> mensagem
     ignorados: tuple[int, ...] = ()  # saldo em branco
+    erros_indices: dict[int, str] = field(default_factory=dict)  # indice_id -> mensagem
+    indices_gravados: int = 0  # valores de índices gravados neste check-in
 
     @property
     def ok(self) -> bool:
-        return not self.erros
+        return not self.erros and not self.erros_indices
 
 
 def mes_de(data: date) -> str:
@@ -340,6 +342,7 @@ def gravar_checkin(
     entradas: list[Entrada],
     hoje: date | None = None,
     data_leitura: date | None = None,
+    valores_indices: dict[int, str] | None = None,
 ) -> Resultado:
     """Valida todas as linhas; se estiverem todas boas grava numa só transação.
 
@@ -348,6 +351,9 @@ def gravar_checkin(
 
     `data_leitura` (opcional) fica gravada em todos os registos desta gravação; sem ela, um registo
     novo fica sem data e um registo já datado mantém a sua.
+
+    `valores_indices` (v6): indice_id -> texto do valor do índice neste mês; em branco não mexe. Entram na
+    mesma regra tudo-ou-nada: um valor inválido impede a gravação dos saldos e vice-versa.
     """
     validar_mes(mes, hoje)
     if data_leitura is not None:
@@ -382,8 +388,9 @@ def gravar_checkin(
             continue
         a_gravar.append((e.plataforma_id, saldo, aporte))
 
-    if erros:
-        return Resultado(erros=erros, ignorados=tuple(ignorados))
+    a_gravar_indices, erros_indices = indices.validar_valores(conn, valores_indices or {})
+    if erros or erros_indices:
+        return Resultado(erros=erros, ignorados=tuple(ignorados), erros_indices=erros_indices)
 
     domingos_por_pid = {e.plataforma_id: e.domingos for e in entradas}
     confirmados_por_pid: dict[int, int] = {}  # soma dos domingos confirmados, para comparar com o aporte
@@ -408,6 +415,7 @@ def gravar_checkin(
                 soma = _gravar_depositos(conn, pid, mes, domingos_por_pid.get(pid))
                 if soma is not None:
                     confirmados_por_pid[pid] = soma
+            indices.gravar_valores(conn, mes, a_gravar_indices)
     except _ErroDomingos as exc:  # nada ficou gravado (a transação foi desfeita)
         return Resultado(erros={exc.plataforma_id: str(exc)}, ignorados=tuple(ignorados))
 
@@ -434,4 +442,4 @@ def gravar_checkin(
             )
         gravados.append(Gravado(pid, ativas[pid]["nome"], resultado, avisos_plano))
 
-    return Resultado(gravados=tuple(gravados), ignorados=tuple(ignorados))
+    return Resultado(gravados=tuple(gravados), ignorados=tuple(ignorados), indices_gravados=len(a_gravar_indices))

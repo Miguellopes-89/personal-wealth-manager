@@ -5,7 +5,7 @@ Lógica sem web, como em `plataformas.py`. Regras:
 - O código de uma categoria nova vem do nome ("Rendimento extra" -> "rendimento_extra").
 - Não há dois nomes iguais sem contar maiúsculas nem acentos: "poupanca" bate com "Poupança". Assim o painel
   não divide o mesmo dinheiro em duas categorias por causa de uma letra.
-- Só se apaga uma categoria sem plataformas (nem inativas). O "Fundo de liberdade" (`emergencia`) nunca se
+- Só se apaga uma categoria sem plataformas (nem inativas) e que não seja o perímetro de um índice (v6). O "Fundo de liberdade" (`emergencia`) nunca se
   apaga: é a base da cobertura em meses do painel.
 """
 from __future__ import annotations
@@ -114,5 +114,8 @@ def apagar(conn: sqlite3.Connection, codigo: str) -> None:
         raise ValueError(
             f"{categoria.nome!r} tem {categoria.n_plataformas} plataforma(s): muda-lhes a categoria antes de a apagar"
         )
+    n_indices = conn.execute("SELECT COUNT(*) FROM indices WHERE perimetro = ?", (codigo,)).fetchone()[0]
+    if n_indices:
+        raise ValueError(f"{categoria.nome!r} é o perímetro de {n_indices} índice(s): muda-o antes de a apagar")
     with conn:
         conn.execute("DELETE FROM categorias WHERE codigo = ?", (codigo,))

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block titulo %}Índices{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><h1>Índices de referência</h1></div>
+
+{% if erro_geral %}<div class="banner erro">{{ erro_geral }}</div>{% endif %}
+{% if aviso_backup %}<div class="banner erro">{{ aviso_backup }}</div>{% endif %}
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+<p class="sub notas">Um índice é qualquer valor que se queira comparar com o património: o preço de um ETF de
+  acumulação (já inclui dividendos e custos), o nível de um índice de mercado ou o índice de preços do INE
+  (inflação). Escreve-se no check-in de cada mês. O painel compara a variação do índice com a rentabilidade
+  do perímetro escolhido, sem contar com os aportes.</p>
+
+<div class="tabela">
+<table>
+  <thead><tr><th>Índice</th><th>Compara com</th><th>Valores</th><th></th></tr></thead>
+  <tbody>
+  {% for i in lista %}
+    <tr class="{{ '' if i.ativo else 'inativa' }}{% if editar and i.id == editar.id %} a-editar{% endif %}">
+      <td>{{ i.nome }}{% if not i.ativo %}<div class="sub">inativo</div>{% endif %}</td>
+      <td>{% if i.perimetro %}{{ rotulos.get(i.perimetro, i.perimetro) }}{% else %}Património todo{% endif %}</td>
+      <td>{{ i.n_valores }}{% if valores[i.id] %} <span class="sub">(último {{ valores[i.id][0][0]|mes }})</span>{% endif %}</td>
+      <td><a href="/indices/{{ i.id }}#formulario">Editar</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="sub">Ainda não há índices.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2 id="formulario">{% if editar %}Editar {{ editar.nome }}{% else %}Novo índice{% endif %}</h2>
+<form class="caixa formulario" method="post" action="{% if editar %}/indices/{{ editar.id }}{% else %}/indices{% endif %}" data-avisar-sair{% if erro %} data-por-gravar{% endif %}>
+  <div class="grelha">
+    <label class="campo">Nome
+      <input type="text" name="nome" value="{{ form.nome or '' }}" maxlength="40" required placeholder="ex.: MSCI World (ETF)"{% if erro %} class="erro"{% endif %}>
+      {% if erro %}<span class="msg-erro">{{ erro }}</span>{% endif %}
+    </label>
+    <label class="campo">Compara com
+      <select name="perimetro">
+        <option value=""{% if not form.perimetro %} selected{% endif %}>Património todo</option>
+        {% for c in categorias %}<option value="{{ c.codigo }}"{% if form.perimetro == c.codigo %} selected{% endif %}>{{ c.nome }}</option>{% endfor %}
+      </select>
+      <span class="sub">Uma categoria (ex.: Investimento contra um índice de ações) ou o património todo (ex.: contra a inflação).</span>
+    </label>
+  </div>
+  {% if editar and editar.n_valores %}<p class="sub">Mudar o perímetro muda também a comparação dos meses passados.</p>{% endif %}
+  <div class="fim">
+    <button type="submit">{% if editar %}Guardar alterações{% else %}Criar índice{% endif %}</button>
+    {% if editar %}<a href="/indices">Cancelar</a>{% endif %}
+  </div>
+</form>
+
+{% if editar %}
+<div class="zona-acoes">
+  {% if editar.ativo %}
+  <form class="caixa" method="post" action="/indices/{{ editar.id }}/desativar">
+    <strong>Desativar</strong>
+    <p class="sub">Sai do check-in e do painel. Os valores ficam guardados.</p>
+    <button type="submit" class="secundario">Desativar</button>
+  </form>
+  {% else %}
+  <form class="caixa" method="post" action="/indices/{{ editar.id }}/reativar">
+    <strong>Reativar</strong> <span class="sub">Volta ao check-in e ao painel.</span>
+    <button type="submit" class="secundario">Reativar</button>
+  </form>
+  {% endif %}
+  {% if not editar.n_valores %}
+  <form class="caixa" method="post" action="/indices/{{ editar.id }}/apagar">
+    <strong>Apagar</strong> <span class="sub">Só é possível porque ainda não tem valores.</span>
+    <button type="submit" class="perigo">Apagar</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if valores[editar.id] %}
+<h2>Valores de {{ editar.nome }}</h2>
+<p class="sub notas">Para corrigir um valor, abre o check-in desse mês e escreve o novo. Apagar aqui só serve para
+  tirar um valor escrito no mês errado.</p>
+<div class="tabela">
+<table>
+  <thead><tr><th>Mês</th><th class="num">Valor</th><th></th></tr></thead>
+  <tbody>
+  {% for mes, texto in valores[editar.id] %}
+    <tr>
+      <td>{{ mes|mes }}</td>
+      <td class="num">{{ texto }}</td>
+      <td><form method="post" action="/indices/{{ editar.id }}/valores/{{ mes }}/apagar"><button type="submit" class="perigo">Apagar</button></form></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

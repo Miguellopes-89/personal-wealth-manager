@@ -91,11 +91,11 @@ _NUMERO = re.compile(r"[+-]?\d+(\.\d+)?")
 _MILHARES = {sep: re.compile(rf"[+-]?\d{{1,3}}(\{sep}\d{{3}})+") for sep in ".,"}
 
 
-def euros_para_cent(texto: str) -> int:
-    """Converte texto digitado ('12,50', '1.234,56', '12.5') em cêntimos.
+def texto_para_decimal(texto: str) -> Decimal:
+    """Converte texto digitado ('12,50', '1.234,56', '12.5') num Decimal exato.
 
     Rejeita o caso ambíguo '1.234' (mil duzentos e trinta e quatro, ou 1,234?) e separadores de milhares
-    mal colocados ('1.234.56' não vira 123.456 €).
+    mal colocados ('1.234.56' não vira 123.456). Serve os euros e os valores dos índices.
     """
     t = texto.strip().replace("€", "").replace(" ", "").replace("\u00a0", "")
     if not t:
@@ -112,7 +112,7 @@ def euros_para_cent(texto: str) -> int:
         if t.count(".") > 1:
             t = t.replace(".", "")  # 1.234.567
         elif len(t.split(".")[1]) == 3:
-            raise ValueError(f"Valor ambíguo: {texto!r} (use vírgula para os cêntimos)")
+            raise ValueError(f"Valor ambíguo: {texto!r} (use vírgula para as casas decimais)")
     if not _NUMERO.fullmatch(t):  # rejeita '1e3' e restos que o Decimal aceitaria
         raise ValueError(f"Valor inválido: {texto!r}")
     try:
@@ -121,6 +121,12 @@ def euros_para_cent(texto: str) -> int:
         raise ValueError(f"Valor inválido: {texto!r}") from None
     if not valor.is_finite():
         raise ValueError(f"Valor inválido: {texto!r}")
+    return valor
+
+
+def euros_para_cent(texto: str) -> int:
+    """Converte texto digitado ('12,50', '1.234,56', '12.5') em cêntimos (regras em `texto_para_decimal`)."""
+    valor = texto_para_decimal(texto)
     cent = int((valor * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
     if abs(cent) > LIMITE_CENT:
         raise ValueError(f"Valor fora do intervalo aceite: {texto!r}")

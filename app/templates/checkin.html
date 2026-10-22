@@ -19,6 +19,7 @@
 {% if resultado %}
 <div class="banner ok">
   Gravado: {{ resultado.gravados|length }} plataforma(s) em {{ mes|mes }}.
+  {% if resultado.indices_gravados %}{{ resultado.indices_gravados }} valor(es) de índices.{% endif %}
   {% if resultado.ignorados %}{{ resultado.ignorados|length }} sem saldo preenchido (não alteradas).{% endif %}
 </div>
 {% if resultado.gravados %}
@@ -104,6 +105,28 @@
   </table>
   </div>
   <p class="sub notas">Vírgula para os cêntimos (12,50). Saldo em branco = plataforma não alterada. Levantamentos: aporte negativo (-100,00).</p>
+  {% if linhas_indices %}
+  <h2 id="indices">Índices de referência</h2>
+  <div class="tabela">
+  <table class="checkin">
+    <thead><tr><th>Índice</th><th class="num">Mês anterior</th><th class="num">Valor neste mês</th></tr></thead>
+    <tbody>
+    {% for li in linhas_indices %}
+      <tr>
+        <td>
+          <strong style="font-weight: 500">{{ li.i.nome }}</strong>
+          <div class="sub">compara com: {{ li.perimetro }}{% if li.registado %} · já registado{% endif %}</div>
+          {% if li.erro %}<div class="msg-erro">{{ li.erro }}</div>{% endif %}
+        </td>
+        <td class="num ref" data-rotulo="Mês anterior">{% if li.anterior %}{{ li.anterior[1] }} <div class="sub">{{ li.anterior[0]|mes }}</div>{% else %}sem valor{% endif %}</td>
+        <td class="num" data-rotulo="Valor neste mês"><input type="text" inputmode="decimal" autocomplete="off" name="indice_{{ li.i.id }}" value="{{ li.texto }}" placeholder="—" aria-label="Valor de {{ li.i.nome }}"{% if li.erro %} class="erro"{% endif %}></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="sub notas">O valor no dia da leitura (preço do ETF ou nível do índice; na inflação, o último publicado). Até 4 casas decimais, com vírgula. Em branco = não alterado. Gerir em <a href="/indices">Índices</a>.</p>
+  {% endif %}
   <div class="acoes">
     <p class="destino">Vai gravar em <strong>{{ mes|mes }}</strong>, leitura de <strong>{{ data_leitura[8:10] }}-{{ data_leitura[5:7] }}-{{ data_leitura[:4] }}</strong>.</p>
     <button type="submit" id="gravar">Gravar check-in</button>

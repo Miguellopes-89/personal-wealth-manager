@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import backup, calc, categorias, checkin, configuracao, dashboard, db, plataformas
+from app import backup, calc, categorias, checkin, configuracao, dashboard, db, indices, plataformas
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["eur"] = calc.formatar_euros
@@ -128,10 +128,31 @@ def sair(request: Request, tarefas: BackgroundTasks):
     return templates.TemplateResponse(request, "sair.html", {"copia": copia.name})
 
 
+def _linhas_indices(conn, mes, textos=None, erros=None) -> list[dict]:
+    """Índices ativos no check-in: valor deste mês (gravado ou escrito) e o último anterior como referência."""
+    textos, erros = textos or {}, erros or {}
+    gravados = indices.valores_do_mes(conn, mes)
+    rotulos = categorias.rotulos(conn)
+    linhas = []
+    for i in indices.listar(conn, so_ativos=True):
+        anterior = conn.execute(
+            "SELECT mes, valor FROM valores_indice WHERE indice_id = ? AND mes < ? ORDER BY mes DESC LIMIT 1",
+            (i.id, mes),
+        ).fetchone()
+        por_defeito = indices.valor_para_texto(gravados[i.id]) if i.id in gravados else ""
+        linhas.append({
+            "i": i, "perimetro": rotulos.get(i.perimetro, i.perimetro) if i.perimetro else "Património todo",
+            "texto": textos.get(i.id, por_defeito), "erro": erros.get(i.id), "registado": i.id in gravados,
+            "anterior": (anterior["mes"], indices.valor_para_texto(anterior["valor"])) if anterior else None,
+        })
+    return linhas
+
+
 def _contexto(conn, mes, data_leitura, valores=None, erros=None, resultado=None, erro_geral=None,
-              marcados=None) -> dict:
+              marcados=None, textos_indices=None, erros_indices=None) -> dict:
     """Prepara o ecrã: `valores` são os textos que o utilizador escreveu (para não os perder num erro);
-    `marcados`, as caixas do desafio que ele tinha marcadas (plataforma -> datas AAAA-MM-DD)."""
+    `marcados`, as caixas do desafio que ele tinha marcadas (plataforma -> datas AAAA-MM-DD);
+    `textos_indices` / `erros_indices`, o mesmo para os valores dos índices (v6)."""
     valores = valores or {}
     erros = erros or {}
     marcados = marcados or {}
@@ -152,7 +173,8 @@ def _contexto(conn, mes, data_leitura, valores=None, erros=None, resultado=None,
         "resultado": resultado,
         "avisos": AVISOS,
         "erro_geral": erro_geral,
-        "por_gravar": bool(erros),  # voltou de um erro: os valores no ecrã não estão gravados
+        "por_gravar": bool(erros or erros_indices),  # voltou de um erro: os valores no ecrã não estão gravados
+        "linhas_indices": _linhas_indices(conn, mes, textos_indices, erros_indices),
     }
 
 
@@ -225,12 +247,20 @@ async def checkin_gravar(request: Request):
         valores[pid] = (str(valor), aporte)
         if domingos is not None:
             marcados[pid] = set(domingos)
+    textos_indices: dict[int, str] = {}
+    for chave, valor in form.items():
+        if chave.startswith("indice_"):
+            try:
+                textos_indices[int(chave[len("indice_"):])] = str(valor)
+            except ValueError:
+                continue
 
     conn = db.connect()
     try:
         try:
             data = _data_do_formulario(str(form.get("data", "")), mes)
-            resultado = checkin.gravar_checkin(conn, mes, entradas, date.today(), data_leitura=data)
+            resultado = checkin.gravar_checkin(conn, mes, entradas, date.today(), data_leitura=data,
+                                               valores_indices=textos_indices)
         except ValueError as exc:  # mês ou data inválidos ou futuros
             mes_atual = checkin.mes_de(date.today())
             contexto = _contexto(conn, mes_atual, checkin.data_por_defeito(mes_atual), erro_geral=str(exc))
@@ -238,6 +268,7 @@ async def checkin_gravar(request: Request):
         if not resultado.ok:
             contexto = _contexto(
                 conn, mes, data, valores=valores, erros=resultado.erros, marcados=marcados,
+                textos_indices=textos_indices, erros_indices=resultado.erros_indices,
                 erro_geral="Nada foi gravado: corrige as linhas assinaladas.",
             )
             return templates.TemplateResponse(request, "checkin.html", contexto, status_code=422)
@@ -458,5 +489,130 @@ def categoria_apagar(request: Request, codigo: str):
         except ValueError as exc:
             return _erro_categoria(request, conn, codigo, nome, str(exc))
         return _depois_de_categoria(request, conn, f"Categoria {nome!r} apagada.")
+    finally:
+        conn.close()
+
+
+# --- Índices de referência (esquema v6) ----------------------------------------------------------------------
+
+def _ecra_indices(request: Request, conn, *, editar=None, form=None, erro=None, msg=None, erro_geral=None,
+                  aviso_backup=None, status_code=200):
+    """Lista de índices, formulário (novo ou edição de `editar`) e valores gravados. `form`: textos já escritos."""
+    if form is None:
+        form = {"nome": editar.nome, "perimetro": editar.perimetro or ""} if editar else {"nome": "", "perimetro": ""}
+    lista = indices.listar(conn)
+    contexto = {
+        "lista": lista, "editar": editar, "form": form, "erro": erro, "msg": msg, "erro_geral": erro_geral,
+        "aviso_backup": aviso_backup, "categorias": categorias.listar(conn), "rotulos": categorias.rotulos(conn),
+        "valores": {
+            i.id: [(m, indices.valor_para_texto(v)) for m, v in reversed(indices.valores(conn, i.id).items())]
+            for i in lista
+        },
+    }
+    return templates.TemplateResponse(request, "indices.html", contexto, status_code=status_code)
+
+
+def _indice_ou_404(request: Request, conn, indice_id: int):
+    i = indices.obter(conn, indice_id)
+    if i is None:
+        return None, _ecra_indices(request, conn, erro_geral="Índice inexistente.", status_code=404)
+    return i, None
+
+
+@app.get("/indices", response_class=HTMLResponse)
+def indices_ver(request: Request):
+    conn = db.connect()
+    try:
+        return _ecra_indices(request, conn)
+    finally:
+        conn.close()
+
+
+@app.post("/indices", response_class=HTMLResponse)
+async def indice_criar(request: Request):
+    form = _form_texto(await request.form())
+    conn = db.connect()
+    try:
+        try:
+            indices.criar(conn, form.get("nome", ""), form.get("perimetro"))
+        except ValueError as exc:
+            return _ecra_indices(request, conn, form=form, erro=str(exc), status_code=422)
+        aviso = _backup_depois_de_mudar(conn)
+        nome = " ".join(form.get("nome", "").split())
+        return _ecra_indices(request, conn, msg=f"Índice {nome!r} criado: o valor escreve-se no check-in.",
+                             aviso_backup=aviso)
+    finally:
+        conn.close()
+
+
+@app.get("/indices/{indice_id}", response_class=HTMLResponse)
+def indice_ver(request: Request, indice_id: int):
+    conn = db.connect()
+    try:
+        i, erro = _indice_ou_404(request, conn, indice_id)
+        return erro or _ecra_indices(request, conn, editar=i)
+    finally:
+        conn.close()
+
+
+@app.post("/indices/{indice_id}", response_class=HTMLResponse)
+async def indice_editar(request: Request, indice_id: int):
+    form = _form_texto(await request.form())
+    conn = db.connect()
+    try:
+        i, erro = _indice_ou_404(request, conn, indice_id)
+        if erro:
+            return erro
+        try:
+            indices.editar(conn, indice_id, form.get("nome", ""), form.get("perimetro"))
+        except ValueError as exc:
+            return _ecra_indices(request, conn, editar=i, form=form, erro=str(exc), status_code=422)
+        aviso = _backup_depois_de_mudar(conn)
+        return _ecra_indices(request, conn, msg="Índice atualizado.", aviso_backup=aviso)
+    finally:
+        conn.close()
+
+
+@app.post("/indices/{indice_id}/valores/{mes}/apagar", response_class=HTMLResponse)
+def indice_apagar_valor(request: Request, indice_id: int, mes: str):
+    conn = db.connect()
+    try:
+        i, erro = _indice_ou_404(request, conn, indice_id)
+        if erro:
+            return erro
+        try:
+            indices.apagar_valor(conn, indice_id, mes)
+        except LookupError as exc:
+            return _ecra_indices(request, conn, erro_geral=f"{exc}.", status_code=404)
+        aviso = _backup_depois_de_mudar(conn)
+        return _ecra_indices(request, conn, msg=f"Valor de {calc.formatar_mes(mes)} apagado em {i.nome}.",
+                             aviso_backup=aviso)
+    finally:
+        conn.close()
+
+
+@app.post("/indices/{indice_id}/{acao}", response_class=HTMLResponse)
+def indice_acao(request: Request, indice_id: int, acao: str):
+    conn = db.connect()
+    try:
+        i, erro = _indice_ou_404(request, conn, indice_id)
+        if erro:
+            return erro
+        try:
+            if acao == "desativar":
+                indices.definir_ativo(conn, indice_id, False)
+                msg = f"{i.nome} desativado: sai do check-in e do painel; os valores ficam guardados."
+            elif acao == "reativar":
+                indices.definir_ativo(conn, indice_id, True)
+                msg = f"{i.nome} reativado."
+            elif acao == "apagar":
+                indices.apagar(conn, indice_id)
+                msg = f"{i.nome} apagado."
+            else:
+                return _ecra_indices(request, conn, erro_geral="Ação desconhecida.", status_code=404)
+        except (ValueError, LookupError) as exc:
+            return _ecra_indices(request, conn, erro_geral=str(exc), status_code=422)
+        aviso = _backup_depois_de_mudar(conn)
+        return _ecra_indices(request, conn, msg=msg, aviso_backup=aviso)
     finally:
         conn.close()
