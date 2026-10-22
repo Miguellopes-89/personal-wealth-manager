@@ -4,7 +4,7 @@ Histórico das alterações relevantes ao código, uma entrada por commit (ou po
 Serve para quem lê o repositório sem ter estado na sessão perceber o que mudou e porquê.
 O que não foi verificado está marcado como "por confirmar".
 
-Versão atual do esquema da base: **5** (`SCHEMA_VERSION` em `app/db.py`).
+Versão atual do esquema da base: **6** (`SCHEMA_VERSION` em `app/db.py`).
 
 | Versão | Mudança | Migração |
 |---|---|---|
@@ -13,6 +13,68 @@ Versão atual do esquema da base: **5** (`SCHEMA_VERSION` em `app/db.py`).
 | 3 | Tabela `configuracao (chave TEXT PK, valor INTEGER)` | `CREATE TABLE IF NOT EXISTS` no arranque |
 | 4 | Tabela `depositos_desafio (plataforma_id, domingo, valor_cent, mes)` | `CREATE TABLE IF NOT EXISTS` no arranque |
 | 5 | Tabela `categorias (codigo PK, nome UNIQUE NOCASE, cor, ordem)`; `plataformas.categoria` passa de `CHECK` fixo a `REFERENCES categorias(codigo)` | Categorias de origem inseridas se a versão era < 5; tabela `plataformas` refeita em `_reconstruir_plataformas` (mesmos ids, transação, `foreign_keys` desligadas na troca e verificadas no fim) |
+| 6 | Tabelas `indices (id, nome UNIQUE NOCASE, perimetro REFERENCES categorias NULL = património todo, ativo, ordem)` e `valores_indice (indice_id, mes, valor INTEGER > 0, em décimas de milésima)` | `CREATE TABLE IF NOT EXISTS` no arranque |
+
+---
+
+## Sessão 22/10/2026 — comparacao-com-indices-pwm
+Commits `313445a` (esquema v6), `e51be38` (índices e check-in), `96bd809` (painel), `8fc1d7e` (ecrã estreito)
+· 519 testes (+58; 461 antes)
+
+**Pedido:** comparar o património com índices de referência (opção escolhida pelo dono: índices definidos por
+ele, valor escrito à mão no check-in). A app continua offline: nada é descarregado.
+
+**Decisões**
+- **Rentabilidade ponderada no tempo** (sem contar com os aportes), porque a variação do saldo mistura dinheiro
+  novo com rendimento. Por mês: `soma dos ganhos ÷ dinheiro em jogo no início do mês`, encadeado entre os dois
+  meses com valor do índice (`dashboard._rentabilidades` e `_comparar`). Dinheiro em jogo: saldo anterior +
+  aporte nas plataformas com ganho registadas no mês (os aportes fazem-se no início do mês); saldo anterior nas
+  não registadas (rende 0 nesse mês; o ganho aparece todo quando voltam) e nas sem ganho (o dinheiro parado conta
+  e rende 0). Os salários entram depois da leitura e não contam como dinheiro em jogo, por isso o aporte de um
+  mês não é contado duas vezes (conta à ordem + plataforma).
+- **Perímetro por índice:** uma categoria ou o património todo. Comparar um índice de ações com o património
+  todo (PPR, certificados, contas à ordem) seria injusto; a inflação compara-se com o património todo.
+- **Um índice é qualquer série:** nível de um índice, preço de um ETF de acumulação (já inclui dividendos e
+  custos) ou índice de preços. Só as variações contam. A inflação sai com atraso: escreve-se o último valor
+  publicado; o desfasamento é constante, as variações continuam comparáveis.
+- **Valores como inteiros** em décimas de milésima (`indices.ESCALA = 10 000`), como o dinheiro em cêntimos. As
+  variações calculam-se com `Fraction` (exatas) e só passam a `float` na apresentação.
+- **Anualização só a partir de 12 meses**; com menos, a diferença é sobretudo ruído e o ecrã diz isso. Métricas
+  ajustadas ao risco (volatilidade, Sharpe, tracking error) ficam de fora: com dados mensais precisam de 24 a 36
+  meses para dizerem alguma coisa.
+- **"Este ano"** começa no primeiro mês do ano com valor do índice, a mesma regra da variação do período.
+- **Valores no check-in**, na mesma gravação tudo-ou-nada; em branco não mexe. Para corrigir, regrava-se o mês;
+  apagar um valor faz-se em `/indices` (para um valor escrito no mês errado).
+- Índice com valores não se apaga: desativa-se (sai do check-in e do painel, guarda o histórico).
+
+**O que mudou**
+- `app/db.py`: esquema v6 (tabelas novas, vazias numa base antiga). `app/backup.py`: `indices.csv` e
+  `valores_indice.csv`. `app/restauro.py`: as duas tabelas são opcionais (cópias v5 restauram-se).
+- `app/indices.py` (novo): validação dos valores, criar/editar/desativar/apagar, valores por mês.
+- `app/calc.py`: `texto_para_decimal` separado de `euros_para_cent` (mesmas regras para euros e índices; a
+  mensagem do valor ambíguo passa a dizer "casas decimais").
+- `app/checkin.py`: `gravar_checkin(..., valores_indices=)`, `Resultado.erros_indices` e `indices_gravados`.
+- `app/categorias.py`: uma categoria usada como perímetro de um índice não se apaga.
+- `app/dashboard.py`: `ComparacaoPeriodo`, `Comparacao`, `Painel.comparacoes`, `_rentabilidades`, `_comparar`.
+- `app/main.py`: rotas `/indices` (lista, criar, editar, desativar, reativar, apagar, apagar valor), campos
+  `indice_<id>` no check-in, filtros Jinja `pct` e `pp`.
+- Templates: `indices.html` (novo), secção no check-in, secção "Comparação com índices" no painel (ligada aos
+  botões do período), link "Índices" na barra lateral. `pwm.css`: abaixo de 600 px o período passa para baixo
+  do nome, para a diferença ficar à vista.
+- `scripts/seed_demo.py`: dois índices fictícios com três valores.
+
+**Testes:** `tests/test_indices.py` (32), `tests/test_main_indices.py` (7), `tests/test_comparacao.py` (13, contas
+à mão em frações exatas: categoria, património todo, aportes não são rendimento, mês não registado, perímetro
+sem dinheiro no início, "Este ano", anualização, formato), `tests/test_migracao.py` (+5, com o esquema exato da
+v5 em `tests/esquema_v5.sql`), `tests/test_seed_demo.py` (+1).
+
+**Verificado no Chromium** (cloud, `seed_demo`): valores no ecrã iguais aos de Python (+1,03 % vs +0,40 %,
++0,63 p.p.; +0,64 % vs +0,42 %, +0,22 p.p.); "Este ano" troca a tabela; índices pré-preenchidos no check-in; valor
+inválido devolve o erro com o texto escrito; "Guardar e sair" pergunta com um valor de índice alterado e não
+pergunta sem alterações ou com o valor reposto; sem erros de JavaScript; sem scroll horizontal a 420 e 1280 px
+no painel, check-in e `/indices`. **Ensaio da migração:** base criada pelo código de `b12afdd` com o `seed_demo`,
+aberta pelo novo: versão 5 → 6, dados das 6 tabelas iguais, `foreign_key_check` vazio, `integrity_check` ok.
+**Por confirmar:** no Windows com a base real.
 
 ---
 

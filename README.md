@@ -6,8 +6,8 @@ num único ecrã e vês logo o resultado (ganho do mês, avisos), sem passar por
 Os dados ficam na tua máquina, numa base de dados SQLite. Não há contas, nem serviços externos, nem CDN.
 
 > **Estado:** versão 1 completa: painel, check-in mensal, gestão de plataformas, cópia de segurança e restauro,
-> com o design final. Em uso desde outubro de 2026. Versão 2 em curso: cobertura do fundo de liberdade e registo
-> dos depósitos do Desafio das 52 semanas feitos; a seguir, metas de poupança e comparação com índices.
+> com o design final. Em uso desde outubro de 2026. Versão 2 em curso: cobertura do fundo de liberdade, registo
+> dos depósitos do Desafio das 52 semanas e comparação com índices feitos; metas de poupança adiadas.
 
 ![Painel](docs/capturas/painel.png)
 
@@ -24,12 +24,15 @@ As capturas usam os dados fictícios da demonstração (ver abaixo).
   com barras por mês), alocação (poupança, investimento, reforma), a lista das plataformas agrupada por categoria
   (saldo, ganho, aporte real vs plano), a cobertura do fundo de liberdade (quantos meses de despesas paga,
   com a despesa mensal de referência editável no próprio painel) e o progresso do Desafio das 52 semanas
-  (confirmados, em falta e por confirmar). Gráficos com Chart.js guardado
+  (confirmados, em falta e por confirmar). Comparação com índices: a rentabilidade de uma categoria ou do
+  património todo, sem contar com os aportes, contra a variação de cada índice no mesmo período. Gráficos com Chart.js guardado
   localmente.
 - **Check-in mensal** (`/checkin`): uma linha por plataforma, com o saldo do mês anterior só como
   referência e o aporte pré-preenchido pelo plano (no Desafio das 52 semanas, uma caixa por domingo em
   aberto, agrupadas por mês). Grava tudo ou nada, e mostra o ganho do mês e os avisos
-  logo a seguir. Regravar um mês atualiza-o, não duplica.
+  logo a seguir. Regravar um mês atualiza-o, não duplica. Por baixo, o valor de cada índice de referência nesse mês.
+- **Índices** (`/indices`): índices de referência (preço de um ETF, nível de um índice, inflação), cada um
+  comparado com uma categoria ou com o património todo; criar, editar, desativar, apagar.
 - **Plataformas** (`/plataformas`): criar, editar, desativar e reativar (com o plano mensal ou o Desafio das
   52 semanas). Só se desativa uma conta fechada: primeiro grava-se no check-in o saldo 0, com o levantamento
   como aporte negativo (e o mesmo valor como aporte no destino). O histórico fica no painel. Só se apaga uma
