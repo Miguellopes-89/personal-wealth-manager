@@ -23,7 +23,10 @@ from app import db
 # Ordem de carga no restauro (plataformas antes das tabelas que as referem). Um teste garante que a lista
 # cobre todas as tabelas do esquema: uma tabela nova esquecida aqui ficava fora das cópias.
 # Ordem de restauro: as categorias antes das plataformas (chave estrangeira), as plataformas antes dos registos.
-TABELAS = ("categorias", "plataformas", "registos_mensais", "planos", "configuracao", "depositos_desafio")
+TABELAS = (
+    "categorias", "plataformas", "registos_mensais", "planos", "configuracao", "depositos_desafio",
+    "indices", "valores_indice",  # v6: os índices antes dos seus valores
+)
 PADRAO_PASTA = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
 _PADRAO_TEMPORARIA = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}\.tmp$")
 TENTATIVAS_RENOMEAR = 5  # o OneDrive (ou um antivírus) pode prender a pasta acabada de escrever

@@ -250,7 +250,7 @@ def test_base_v4_migra_para_v5_sem_perder_dados(tmp_path):
 
     db.init_db(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 5
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert _conteudo(conn) == antes  # mesmos ids, saldos, datas, plano, configuração e depósitos
     assert "REFERENCES categorias(codigo)" in _sql_plataformas(conn)
     assert "CHECK (categoria IN" not in _sql_plataformas(conn)
@@ -335,3 +335,101 @@ def test_restaura_categorias_criadas_e_renomeadas(tmp_path):
     nova = db.connect(destino)
     tabelas = TABELAS_V4 + ("categorias",)
     assert _conteudo(nova, tabelas) == _conteudo(conn, tabelas)
+
+
+# --- Versão 5 -> 6: índices de referência --------------------------------------------------------------------
+
+ESQUEMA_V5 = (Path(__file__).parent / "esquema_v5.sql").read_text(encoding="utf-8")
+TABELAS_V5 = TABELAS_V4 + ("categorias",)
+
+
+def _base_v5(caminho):
+    conn = db.connect(caminho)
+    conn.executescript(ESQUEMA_V5)
+    conn.executescript(
+        """
+        INSERT INTO categorias VALUES ('extra', 'Extra', '#1f9e89', 11);
+        INSERT INTO plataformas (id, nome, categoria, titular, plano_mensal_cent, ordem) VALUES
+            (3, 'P2P Exemplo', 'p2p', 'Ana', 0, 10), (7, 'Corretora Exemplo', 'investimento', 'Rui', 5000, 20);
+        INSERT INTO registos_mensais VALUES (3, '2026-09', 100000, 0, '2026-09-13'), (7, '2026-10', 300000, 5000, '2026-10-01');
+        INSERT INTO planos (id, plataforma_id, tipo, data_inicio) VALUES (5, 3, 'desafio_52', '2026-01-01');
+        INSERT INTO configuracao VALUES ('despesa_mensal_cent', 150000);
+        """
+    )
+    conn.commit()
+    return conn
+
+
+def test_base_v5_migra_para_v6_sem_perder_dados(tmp_path):
+    conn = _base_v5(tmp_path / "v5.db")
+    antes = _conteudo(conn, TABELAS_V5)
+
+    db.init_db(conn)
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 6
+    assert _conteudo(conn, TABELAS_V5) == antes  # inclui a categoria criada na app e os nomes editados
+    assert conn.execute("SELECT COUNT(*) FROM indices").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM valores_indice").fetchone()[0] == 0
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+
+def test_tabelas_v6_validam_os_dados(tmp_path):
+    conn = _base_v5(tmp_path / "v5.db")
+    db.init_db(conn)
+    conn.execute("INSERT INTO indices (id, nome, perimetro) VALUES (1, 'Ações mundo', 'investimento'), (2, 'Inflação', NULL)")
+    conn.execute("INSERT INTO valores_indice VALUES (1, '2026-10', 1301450)")
+    for sql in (
+        "INSERT INTO indices (nome, perimetro) VALUES ('ações MUNDO', NULL)",  # nome repetido
+        "INSERT INTO indices (nome, perimetro) VALUES ('X', 'nao_existe')",  # categoria inexistente
+        "INSERT INTO valores_indice VALUES (1, '2026-13', 10)",  # mês impossível
+        "INSERT INTO valores_indice VALUES (2, '2026-10', 0)",  # valor tem de ser positivo
+        "INSERT INTO valores_indice VALUES (9, '2026-10', 10)",  # índice inexistente
+        "DELETE FROM categorias WHERE codigo = 'investimento'",  # categoria usada como perímetro
+    ):
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(sql)
+    conn.execute("DELETE FROM indices WHERE id = 1")  # apagar o índice leva os valores
+    assert conn.execute("SELECT COUNT(*) FROM valores_indice").fetchone()[0] == 0
+
+
+def test_migracao_v6_e_idempotente(tmp_path):
+    conn = _base_v5(tmp_path / "v5.db")
+    db.init_db(conn)
+    conn.execute("INSERT INTO indices (id, nome) VALUES (1, 'Inflação')")
+    conn.execute("INSERT INTO valores_indice VALUES (1, '2026-10', 1184200)")
+    conn.commit()
+    depois = _conteudo(conn, TABELAS_V5 + ("indices", "valores_indice"))
+
+    db.init_db(conn)
+
+    assert _conteudo(conn, TABELAS_V5 + ("indices", "valores_indice")) == depois
+
+
+def test_copia_v6_restaura_indices(tmp_path):
+    conn = _base_v5(tmp_path / "v5.db")
+    db.init_db(conn)
+    conn.execute("INSERT INTO indices (id, nome, perimetro, ativo, ordem) VALUES (1, 'Ações mundo', 'investimento', 0, 3)")
+    conn.execute("INSERT INTO valores_indice VALUES (1, '2026-10', 1301450)")
+    conn.commit()
+    copia = backup.exportar_csv(conn, tmp_path / "backup", agora=datetime(2026, 10, 22, 12, 0, 0))
+
+    destino = tmp_path / "restaurada.db"
+    contagens = restauro.restaurar(copia, destino)
+
+    assert contagens["indices"] == 1 and contagens["valores_indice"] == 1
+    nova = db.connect(destino)
+    assert tuple(nova.execute("SELECT * FROM indices").fetchone()) == (1, "Ações mundo", "investimento", 0, 3)
+    assert tuple(nova.execute("SELECT * FROM valores_indice").fetchone()) == (1, "2026-10", 1301450)
+
+
+def test_restaura_copia_v5_sem_csv_dos_indices(tmp_path):
+    conn = _base_v5(tmp_path / "v5.db")
+    db.init_db(conn)
+    copia = backup.exportar_csv(conn, tmp_path / "backup", agora=datetime(2026, 10, 22, 12, 0, 0))
+    (copia / "indices.csv").unlink()  # como uma cópia feita antes da v6
+    (copia / "valores_indice.csv").unlink()
+
+    contagens = restauro.restaurar(copia, tmp_path / "restaurada.db")
+
+    assert contagens["indices"] == 0 and contagens["valores_indice"] == 0 and contagens["plataformas"] == 2

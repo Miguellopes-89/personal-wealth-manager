@@ -9,9 +9,10 @@ import os
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 # 2: registos_mensais.data_leitura; 3: tabela configuracao; 4: tabela depositos_desafio;
-# 5: tabela categorias (editáveis na app) e plataformas.categoria passa a apontar para ela
+# 5: tabela categorias (editáveis na app) e plataformas.categoria passa a apontar para ela;
+# 6: tabelas indices e valores_indice (comparação com índices de referência)
 
 # Categorias criadas com a base (ou na migração para a v5): (código, nome no ecrã, cor).
 # Depois disso vivem na tabela `categorias` e editam-se na app; o código nunca muda.
@@ -107,6 +108,28 @@ CREATE TABLE IF NOT EXISTS depositos_desafio (
     PRIMARY KEY (plataforma_id, domingo),
     FOREIGN KEY (plataforma_id, mes) REFERENCES registos_mensais(plataforma_id, mes) ON DELETE CASCADE
 ) WITHOUT ROWID;
+
+-- Índices de referência (v6): um índice de mercado, o preço de um ETF ou a inflação, comparado com a rentabilidade
+-- de um perímetro do património: uma categoria (`perimetro` = código) ou o património todo (NULL).
+CREATE TABLE IF NOT EXISTS indices (
+    id        INTEGER PRIMARY KEY,
+    nome      TEXT    NOT NULL COLLATE NOCASE UNIQUE CHECK (length(trim(nome)) > 0),
+    perimetro TEXT    REFERENCES categorias(codigo) ON DELETE RESTRICT,
+    ativo     INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),
+    ordem     INTEGER NOT NULL DEFAULT 0
+);
+
+-- Valor de cada índice no check-in de cada mês, em décimas de milésima (130,145 -> 1301450): inteiro, como o
+-- dinheiro, para não acumular erros de float. Só as variações importam, por isso a base do índice é indiferente.
+CREATE TABLE IF NOT EXISTS valores_indice (
+    indice_id INTEGER NOT NULL REFERENCES indices(id) ON DELETE CASCADE,
+    mes       TEXT    NOT NULL CHECK (
+        mes GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'
+        AND CAST(substr(mes, 6, 2) AS INTEGER) BETWEEN 1 AND 12
+    ),
+    valor     INTEGER NOT NULL CHECK (valor > 0),
+    PRIMARY KEY (indice_id, mes)
+) WITHOUT ROWID;
 """
 
 
@@ -177,8 +200,8 @@ def _migrar(conn: sqlite3.Connection) -> None:
     """Atualiza uma base criada por uma versão anterior do esquema, sem perder dados."""
     if "data_leitura" not in _colunas(conn, "registos_mensais"):  # versão 1 -> 2
         conn.execute(f"ALTER TABLE registos_mensais ADD COLUMN {_COLUNA_DATA_LEITURA}")
-    # 2 -> 3 e 3 -> 4: as tabelas configuracao e depositos_desafio são criadas pelo CREATE TABLE IF NOT EXISTS
-    # do SCHEMA; uma base antiga fica com elas vazias.
+    # 2 -> 3, 3 -> 4 e 5 -> 6: as tabelas configuracao, depositos_desafio, indices e valores_indice são criadas
+    # pelo CREATE TABLE IF NOT EXISTS do SCHEMA; uma base antiga fica com elas vazias.
     sql = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'plataformas'").fetchone()[0]
     if _MARCA_V5 not in sql:  # 4 -> 5
         _reconstruir_plataformas(conn)
