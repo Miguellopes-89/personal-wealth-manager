@@ -17,7 +17,7 @@ import os
 import sqlite3
 from datetime import date
 
-from app import checkin, configuracao, db, planos
+from app import checkin, configuracao, db, indices, planos
 
 # nome, categoria, titular, plano mensal (€), calcula ganho, entra na alocação
 PLATAFORMAS = [
@@ -40,6 +40,12 @@ INICIO_DESAFIO = "2024-01-01"
 LEITURAS = [date(2026, 7, 1), date(2026, 8, 1), date(2026, 9, 1)]
 
 DESPESA_MENSAL_EUR = 1500  # referência fictícia para a cobertura do fundo de liberdade
+
+# Índices de referência fictícios (v6): nome, perímetro (categoria ou None = património todo), um valor por leitura.
+INDICES = [
+    ("Ações mundo (ETF)", "investimento", ["100", "101,2", "100,4"]),
+    ("Inflação (IPC)", None, ["118,1", "118,3", "118,6"]),
+]
 
 # Plataformas com ganho: saldo inicial (€) e rendimento mensal fictício.
 INICIAL_EUR = {
@@ -72,8 +78,8 @@ SO_SALDO_EUR = {
 
 
 def carregar(conn: sqlite3.Connection) -> None:
-    """Insere plataformas, o plano do Desafio (com os depósitos confirmados), a despesa de referência e três
-    meses de registos fictícios.
+    """Insere plataformas, o plano do Desafio (com os depósitos confirmados), a despesa de referência, três
+    meses de registos fictícios e dois índices de referência com os seus valores.
 
     Tudo numa transação.
     """
@@ -127,6 +133,12 @@ def carregar(conn: sqlite3.Connection) -> None:
                            VALUES (?, ?, ?, 0, NULL)""",
                         (p["id"], checkin.mes_de(leitura), saldo_eur * 100),
                     )
+
+        for ordem, (nome, perimetro, textos) in enumerate(INDICES, start=1):
+            cur = conn.execute("INSERT INTO indices (nome, perimetro, ordem) VALUES (?, ?, ?)", (nome, perimetro, ordem * 10))
+            indices.gravar_valores_varios(conn, cur.lastrowid, {
+                checkin.mes_de(leitura): indices.valor_de_texto(t) for leitura, t in zip(LEITURAS, textos)
+            })
 
 
 def main() -> int:

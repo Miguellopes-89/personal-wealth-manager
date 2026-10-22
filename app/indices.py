@@ -163,6 +163,12 @@ def gravar_valores(conn: sqlite3.Connection, mes: str, a_gravar: dict[int, int])
     )
 
 
+def gravar_valores_varios(conn: sqlite3.Connection, indice_id: int, por_mes: dict[str, int]) -> None:
+    """Vários meses de um índice (dados de demonstração). Não abre transação."""
+    for mes, valor in por_mes.items():
+        gravar_valores(conn, mes, {indice_id: valor})
+
+
 def apagar_valor(conn: sqlite3.Connection, indice_id: int, mes: str) -> None:
     with conn:
         if conn.execute("DELETE FROM valores_indice WHERE indice_id = ? AND mes = ?", (indice_id, mes)).rowcount == 0:

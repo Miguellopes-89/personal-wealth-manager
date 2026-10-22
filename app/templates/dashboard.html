@@ -99,6 +99,41 @@
   <div class="sub dica">Dinheiro novo = o que ficou de lado dos salários: aportes às plataformas com ganho + variação das contas sem ganho (contas à ordem, numerário, cripto). Os aportes saem das contas à ordem, por isso cada euro conta uma vez só. Rendimento = soma dos ganhos (juros e valorização).</div>
 </section>
 
+<section class="caixa comparacao" aria-labelledby="titulo-comparacao">
+  <h2 id="titulo-comparacao">Comparação com índices</h2>
+  <div class="sub">Rentabilidade sem contar com os aportes, no período escolhido na evolução.</div>
+  {% if not painel.comparacoes %}
+  <p class="sub">Ainda não há índices ativos. Cria-os em <a href="/indices">Índices</a> e escreve o valor no check-in de cada mês.</p>
+  {% else %}
+  <div class="tabela">
+  <table>
+    <thead><tr><th>Índice</th><th>Período</th><th class="num">Perímetro</th><th class="num">Índice</th><th class="num">Diferença</th></tr></thead>
+    {% for periodo in ['tudo', 'ano'] %}
+    <tbody data-periodo-bloco="{{ periodo }}"{% if periodo == 'ano' %} hidden{% endif %}>
+    {% for c in painel.comparacoes %}
+      {% set r = c.tudo if periodo == 'tudo' else c.ano %}
+      <tr>
+        <td>{{ c.nome }}<div class="sub">compara com: {{ c.perimetro_rotulo }}</div></td>
+        {% if r %}
+        <td>{{ r.mes_inicio|mes }} a {{ r.mes_fim|mes }}<div class="sub">{{ r.n_meses }} {{ 'mês' if r.n_meses == 1 else 'meses' }}</div></td>
+        <td class="num">{{ r.carteira_pct|pct }}{% if r.carteira_ano_pct is not none %}<div class="sub">{{ r.carteira_ano_pct|pct }} por ano</div>{% endif %}</td>
+        <td class="num">{{ r.indice_pct|pct }}{% if r.indice_ano_pct is not none %}<div class="sub">{{ r.indice_ano_pct|pct }} por ano</div>{% endif %}</td>
+        <td class="num {{ 'pos' if r.diferenca_pp > 0 else ('neg' if r.diferenca_pp < 0 else '') }}">{{ r.diferenca_pp|pp }}</td>
+        {% else %}
+        <td colspan="4" class="sub">Faltam dados: são precisos dois check-ins com o valor do índice neste período, e saldos no perímetro entre eles.</td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+    {% endfor %}
+  </table>
+  </div>
+  <div class="sub dica">Rentabilidade do perímetro = ganhos de cada mês ÷ dinheiro em jogo no início do mês, encadeados
+    (os aportes não contam como rendimento). O dinheiro parado conta e rende 0. O índice não tem custos de corretagem
+    nem impostos. Com poucos meses, a diferença é sobretudo ruído: só é anualizada a partir de 12 meses.</div>
+  {% endif %}
+</section>
+
 {% set cob = painel.cobertura %}
 {% if cob %}
 <h2>Fundo de liberdade</h2>
@@ -313,6 +348,7 @@ if (typeof Chart === 'undefined') {
     evolucao.data.datasets.forEach((d, i) => { d.data = series[i].valores.slice(inicio); });
     evolucao.update();
     botoes.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.periodo === periodo)));
+    document.querySelectorAll('[data-periodo-bloco]').forEach(b => { b.hidden = b.dataset.periodoBloco !== periodo; });
     mostrarCrescimento(inicio);
     const total = dados.total_cent.slice(inicio);
     if (total.length < 2) {

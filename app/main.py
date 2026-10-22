@@ -19,6 +19,17 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["eur"] = calc.formatar_euros
 templates.env.filters["mes"] = calc.formatar_mes
 
+
+def _pct(valor: float, unidade: str = " %") -> str:
+    """1.234 -> '+1,23 %' (com sinal, vírgula decimal; o menos é o sinal tipográfico)."""
+    texto = f"{abs(valor):.2f}".replace(".", ",")
+    sinal = "+" if valor > 0 else ("−" if valor < 0 and texto != "0,00" else "")
+    return f"{sinal}{texto}{unidade}"
+
+
+templates.env.filters["pct"] = _pct
+templates.env.filters["pp"] = lambda v: _pct(v, " p.p.")
+
 AVISOS = {
     calc.AVISO_GANHO_NEGATIVO: "Ganho negativo: confirma o saldo e o aporte (erro de registo ou perda real).",
     calc.AVISO_MES_EM_FALTA: "Há meses sem registo antes deste: o ganho cobre vários meses.",

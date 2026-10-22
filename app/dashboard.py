@@ -12,6 +12,9 @@ Regras:
 - O painel mostra o último mês com registos (`Painel.mes`); `desatualizado` diz se já passou o mês atual.
 - A cobertura do fundo de liberdade é o saldo da categoria `emergencia` no mês do painel a dividir pela
   despesa mensal de referência (`configuracao.py`); sem referência, o painel mostra só o saldo.
+- Comparação com índices (v6): a rentabilidade de um perímetro (uma categoria ou o património todo) sem contar
+  com os aportes, encadeada mês a mês (rentabilidade ponderada no tempo), contra a variação do índice entre os
+  mesmos meses. Ver `_rentabilidades` e `_comparar`.
 - Desafio das 52 semanas (desde o esquema v4): o previsto pelo plano até hoje divide-se em quatro partes que
   somam sempre o previsto: anteriores ao registo (domingos até à primeira leitura: estão no saldo inicial, não
   foram verificados um a um), confirmados no check-in (`depositos_desafio`), em falta (domingos já cobertos
@@ -22,8 +25,9 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from datetime import date
+from fractions import Fraction
 
-from app import calc, categorias, checkin, configuracao, planos
+from app import calc, categorias, checkin, configuracao, indices, planos
 
 CATEGORIA_FUNDO = categorias.CATEGORIA_FUNDO  # código interno; no ecrã, por defeito, "Fundo de liberdade"
 
@@ -145,6 +149,60 @@ class Cobertura:
 
 
 @dataclass(frozen=True)
+class ComparacaoPeriodo:
+    """Rentabilidade do perímetro e variação do índice entre dois meses com valor do índice.
+
+    As variações são frações exatas (Fraction: 1/20 = +5 %), calculadas a partir de cêntimos e de valores
+    inteiros; só a apresentação passa a float.
+    """
+
+    mes_inicio: str
+    mes_fim: str
+    carteira: Fraction
+    indice: Fraction
+
+    @property
+    def n_meses(self) -> int:
+        return calc.mes_para_indice(self.mes_fim) - calc.mes_para_indice(self.mes_inicio)
+
+    @property
+    def carteira_pct(self) -> float:
+        return float(self.carteira * 100)
+
+    @property
+    def indice_pct(self) -> float:
+        return float(self.indice * 100)
+
+    @property
+    def diferenca_pp(self) -> float:
+        """Pontos percentuais: positivo = o perímetro rendeu mais do que o índice."""
+        return float((self.carteira - self.indice) * 100)
+
+    def _por_ano(self, variacao: Fraction) -> float | None:
+        if self.n_meses < 12:  # anualizar meio ano de dados exagera o ruído
+            return None
+        return ((1 + float(variacao)) ** (12 / self.n_meses) - 1) * 100
+
+    @property
+    def carteira_ano_pct(self) -> float | None:
+        return self._por_ano(self.carteira)
+
+    @property
+    def indice_ano_pct(self) -> float | None:
+        return self._por_ano(self.indice)
+
+
+@dataclass(frozen=True)
+class Comparacao:
+    indice_id: int
+    nome: str
+    perimetro: str | None  # código da categoria; None = património todo
+    perimetro_rotulo: str
+    tudo: ComparacaoPeriodo | None  # "Desde o início"; None = faltam dados
+    ano: ComparacaoPeriodo | None  # "Este ano"
+
+
+@dataclass(frozen=True)
 class Painel:
     mes: str
     mes_atual: str
@@ -158,6 +216,7 @@ class Painel:
     cobertura: Cobertura | None = None  # None se não há plataformas da categoria do fundo de liberdade
     categorias: tuple[categorias.Categoria, ...] = ()  # pela ordem do ecrã: nomes e cores (esquema v5)
     crescimento: tuple[Crescimento | None, ...] = ()  # um por mês de `meses`; None no primeiro (não há anterior)
+    comparacoes: tuple[Comparacao, ...] = ()  # uma por índice ativo (v6)
 
 
 def _meses_entre(primeiro: str, ultimo: str) -> list[str]:
@@ -247,6 +306,17 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
             resultados[(p["id"], res.mes)] = res
 
     crescimento = _crescimento(todas, registos, saldos, resultados, meses)
+    inicio_ano = next(i for i, m in enumerate(meses) if m[:4] == mes[:4])
+    comparacoes = []
+    for ind in indices.listar(conn, so_ativos=True):
+        rent = _rentabilidades(todas, saldos, resultados, meses, ind.perimetro)
+        valores = indices.valores(conn, ind.id)
+        comparacoes.append(Comparacao(
+            ind.id, ind.nome, ind.perimetro,
+            rotulos.get(ind.perimetro, ind.perimetro) if ind.perimetro else "Património todo",
+            tudo=_comparar(meses, rent, valores, 0),
+            ano=_comparar(meses, rent, valores, inicio_ano),
+        ))
 
     cartoes: list[Cartao] = []
     for p in plataformas:
@@ -330,6 +400,7 @@ def construir_painel(conn: sqlite3.Connection, hoje: date | None = None) -> Pain
         cobertura=cobertura,
         categorias=lista_categorias,
         crescimento=crescimento,
+        comparacoes=tuple(comparacoes),
     )
 
 
@@ -361,6 +432,68 @@ def _crescimento(
                 liquidez += agora - antes
         resultado.append(Crescimento(mes, aportes, liquidez, rendimento, novas))
     return tuple(resultado)
+
+
+def _rentabilidades(
+    todas: list[sqlite3.Row],
+    saldos: dict[int, list[int | None]],
+    resultados: dict[tuple[int, str], calc.ResultadoMes],
+    meses: list[str],
+    perimetro: str | None,
+) -> list[Fraction | None]:
+    """Rentabilidade de cada mês do perímetro (categoria, ou None = património todo); None no primeiro mês e
+    nos meses em que o perímetro não tinha dinheiro.
+
+    rentabilidade = soma dos ganhos ÷ dinheiro em jogo no início do mês, sendo o dinheiro em jogo:
+    - numa plataforma com ganho registada no mês: saldo anterior + aporte (os aportes fazem-se no início do mês);
+    - numa plataforma com ganho não registada no mês: o saldo anterior (rende 0 neste mês; o ganho aparece todo
+      no mês em que voltar a ser registada, como no resto do painel);
+    - numa plataforma sem ganho (contas à ordem, numerário): o saldo anterior, a render 0. É o custo real do
+      dinheiro parado. Os salários entram depois da leitura e não contam como dinheiro em jogo.
+    Uma plataforma no seu primeiro registo fica de fora (não tem saldo anterior).
+    """
+    resultado: list[Fraction | None] = [None]
+    for i in range(1, len(meses)):
+        mes = meses[i]
+        ganho = base = 0
+        for p in todas:
+            if perimetro is not None and p["categoria"] != perimetro:
+                continue
+            antes = saldos[p["id"]][i - 1]
+            if antes is None:
+                continue
+            res = resultados.get((p["id"], mes))
+            if p["calcula_ganho"] and res is not None and res.ganho_cent is not None:
+                ganho += res.ganho_cent
+                base += res.saldo_cent - res.ganho_cent  # = saldo anterior + aporte
+            else:
+                base += antes
+        resultado.append(Fraction(ganho, base) if base > 0 else None)
+    return resultado
+
+
+def _comparar(
+    meses: list[str], rentabilidades: list[Fraction | None], valores: dict[str, int], inicio: int
+) -> ComparacaoPeriodo | None:
+    """Comparação desde `inicio` (posição em `meses`): do primeiro ao último mês com valor do índice.
+
+    Precisa de dois meses com valor e de rentabilidade em todos os meses entre eles; se faltar no início
+    (perímetro ainda sem dinheiro), começa no mês com valor seguinte. None se não houver dados que cheguem.
+    """
+    com_valor = [k for k in range(inicio, len(meses)) if meses[k] in valores]
+    if len(com_valor) < 2:
+        return None
+    fim = com_valor[-1]
+    for comeco in com_valor[:-1]:
+        trecho = rentabilidades[comeco + 1: fim + 1]
+        if all(r is not None for r in trecho):
+            acumulado = Fraction(1)
+            for r in trecho:
+                acumulado *= 1 + r
+            return ComparacaoPeriodo(
+                meses[comeco], meses[fim], acumulado - 1, Fraction(valores[meses[fim]], valores[meses[comeco]]) - 1
+            )
+    return None
 
 
 def _progresso_desafio(conn: sqlite3.Connection, pid: int, nome: str, inicio: date, hoje: date) -> ProgressoDesafio:

@@ -126,7 +126,7 @@ td.num, th.num { text-align: right; }
 .segmentos button[aria-pressed="true"] { background: var(--acento-suave); color: var(--acento); }
 #variacao-periodo { margin-bottom: .75rem; }
 .dica { font-size: .8rem; margin-top: .4rem; }
-.crescimento { margin-top: 1rem; }
+.crescimento, .comparacao { margin-top: 1rem; }
 .crescimento h2 { margin: 0; font-size: .95rem; }
 #crescimento-periodo { margin-bottom: .75rem; }
 .crescimento-corpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 1rem 1.5rem; align-items: start; }

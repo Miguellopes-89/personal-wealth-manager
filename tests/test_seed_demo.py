@@ -78,3 +78,13 @@ def test_demo_confirma_os_depositos_do_desafio(conn):
     soma = conn.execute("SELECT SUM(valor_cent) FROM depositos_desafio").fetchone()[0]
     aportes = sum(r["aporte_cent"] for r in _registos(conn, seed_demo.NOME_P2P))
     assert soma == aportes > 0
+
+
+def test_demo_tem_indices_com_comparacao(conn):
+    from datetime import date
+
+    from app import dashboard
+    seed_demo.carregar(conn)
+    painel = dashboard.construir_painel(conn, date(2026, 9, 15))
+    assert [c.nome for c in painel.comparacoes] == ["Ações mundo (ETF)", "Inflação (IPC)"]
+    assert all(c.tudo is not None and c.tudo.n_meses == 2 for c in painel.comparacoes)
