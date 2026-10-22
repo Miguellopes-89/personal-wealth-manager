@@ -106,16 +106,17 @@
   <p class="sub">Ainda não há índices ativos. Cria-os em <a href="/indices">Índices</a> e escreve o valor no check-in de cada mês.</p>
   {% else %}
   <div class="tabela">
-  <table>
-    <thead><tr><th>Índice</th><th>Período</th><th class="num">Perímetro</th><th class="num">Índice</th><th class="num">Diferença</th></tr></thead>
+  <table class="tabela-comparacao">
+    <thead><tr><th>Índice</th><th class="col-periodo">Período</th><th class="num">Perímetro</th><th class="num">Índice</th><th class="num">Diferença</th></tr></thead>
     {% for periodo in ['tudo', 'ano'] %}
     <tbody data-periodo-bloco="{{ periodo }}"{% if periodo == 'ano' %} hidden{% endif %}>
     {% for c in painel.comparacoes %}
       {% set r = c.tudo if periodo == 'tudo' else c.ano %}
       <tr>
-        <td>{{ c.nome }}<div class="sub">compara com: {{ c.perimetro_rotulo }}</div></td>
+        <td>{{ c.nome }}<div class="sub">compara com: {{ c.perimetro_rotulo }}</div>
+          {% if r %}<div class="sub so-estreito">{{ r.mes_inicio|mes }} a {{ r.mes_fim|mes }} · {{ r.n_meses }} {{ 'mês' if r.n_meses == 1 else 'meses' }}</div>{% endif %}</td>
         {% if r %}
-        <td>{{ r.mes_inicio|mes }} a {{ r.mes_fim|mes }}<div class="sub">{{ r.n_meses }} {{ 'mês' if r.n_meses == 1 else 'meses' }}</div></td>
+        <td class="col-periodo">{{ r.mes_inicio|mes }} a {{ r.mes_fim|mes }}<div class="sub">{{ r.n_meses }} {{ 'mês' if r.n_meses == 1 else 'meses' }}</div></td>
         <td class="num">{{ r.carteira_pct|pct }}{% if r.carteira_ano_pct is not none %}<div class="sub">{{ r.carteira_ano_pct|pct }} por ano</div>{% endif %}</td>
         <td class="num">{{ r.indice_pct|pct }}{% if r.indice_ano_pct is not none %}<div class="sub">{{ r.indice_ano_pct|pct }} por ano</div>{% endif %}</td>
         <td class="num {{ 'pos' if r.diferenca_pp > 0 else ('neg' if r.diferenca_pp < 0 else '') }}">{{ r.diferenca_pp|pp }}</td>
