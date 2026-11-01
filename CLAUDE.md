@@ -62,6 +62,7 @@ dá os comandos um a um, prontos a colar, e diz o que deve aparecer.
 - `app/dashboard.py` — painel (património, evolução, alocação, cobertura do fundo de liberdade, comparação com índices).
 - `app/configuracao.py` — valores editáveis guardados na base (despesa mensal de referência).
 - `app/indices.py` — índices de referência e os seus valores mensais (a comparação está em `dashboard.py`).
+- `app/aforro.py` — Certificados de Aforro: subscrições e simulação do valor no vencimento (cenários de taxa).
 - `app/backup.py` / `app/restauro.py` — cópias CSV com data e hora, e restauro.
 - `app/main.py` — rotas web e middleware que só aceita pedidos locais.
 - `scripts/pwm.bat` — arranque no Windows (venv em `%LOCALAPPDATA%\pwm\venv`, backup, abre o browser).

@@ -33,6 +33,9 @@ As capturas usam os dados fictícios da demonstração (ver abaixo).
   logo a seguir. Regravar um mês atualiza-o, não duplica. Por baixo, o valor de cada índice de referência nesse mês.
 - **Índices** (`/indices`): índices de referência (preço de um ETF, nível de um índice, inflação), cada um
   comparado com uma categoria ou com o património todo; criar, editar, desativar, apagar.
+- **Certificados de Aforro** (`/aforro`): subscrições da série E como no extrato (data, unidades, valor
+  unitário) e simulação do valor no vencimento, líquido de IRS, com a taxa base a 0 %, à atual e ao teto
+  (3,5 %). Também no painel.
 - **Plataformas** (`/plataformas`): criar, editar, desativar e reativar (com o plano mensal ou o Desafio das
   52 semanas). Só se desativa uma conta fechada: primeiro grava-se no check-in o saldo 0, com o levantamento
   como aporte negativo (e o mesmo valor como aporte no destino). O histórico fica no painel. Só se apaga uma

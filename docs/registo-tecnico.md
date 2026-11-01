@@ -4,7 +4,7 @@ Histórico das alterações relevantes ao código, uma entrada por commit (ou po
 Serve para quem lê o repositório sem ter estado na sessão perceber o que mudou e porquê.
 O que não foi verificado está marcado como "por confirmar".
 
-Versão atual do esquema da base: **6** (`SCHEMA_VERSION` em `app/db.py`).
+Versão atual do esquema da base: **7** (`SCHEMA_VERSION` em `app/db.py`).
 
 | Versão | Mudança | Migração |
 |---|---|---|
@@ -14,6 +14,47 @@ Versão atual do esquema da base: **6** (`SCHEMA_VERSION` em `app/db.py`).
 | 4 | Tabela `depositos_desafio (plataforma_id, domingo, valor_cent, mes)` | `CREATE TABLE IF NOT EXISTS` no arranque |
 | 5 | Tabela `categorias (codigo PK, nome UNIQUE NOCASE, cor, ordem)`; `plataformas.categoria` passa de `CHECK` fixo a `REFERENCES categorias(codigo)` | Categorias de origem inseridas se a versão era < 5; tabela `plataformas` refeita em `_reconstruir_plataformas` (mesmos ids, transação, `foreign_keys` desligadas na troca e verificadas no fim) |
 | 6 | Tabelas `indices (id, nome UNIQUE NOCASE, perimetro REFERENCES categorias NULL = património todo, ativo, ordem)` e `valores_indice (indice_id, mes, valor INTEGER > 0, em décimas de milésima)` | `CREATE TABLE IF NOT EXISTS` no arranque |
+| 7 | Tabela `subscricoes_aforro (id, plataforma_id REFERENCES plataformas, serie, data_subscricao, unidades > 0, valor_unitario >= 100000 em centésimas de milésima, data_valor >= data_subscricao)`; chaves `aforro_e_taxa_base` e `aforro_e_taxa_base_data` em `configuracao` | `CREATE TABLE IF NOT EXISTS` no arranque |
+
+---
+
+## Sessão 01/11/2026 — simulacao-certificados-aforro-pwm
+Commits `461c199` (esquema v7 e motor), `bfb55ce` (ecrã e painel) · 561 testes (+42; 519 antes)
+
+**Pedido:** ver a previsão do valor final dos Certificados de Aforro (opção B escolhida pelo dono: simulação por
+subscrição, em vez de uma estimativa a partir do saldo).
+
+**Decisões**
+- **Regras da série E** da Portaria n.º 329-A/2017: taxa base = Euribor 3M + 1 p.p., entre 0 % e 3,5 %; taxa do
+  trimestre = taxa base no início do trimestre + prémio (0,5 p.p. do 2.º ao 5.º ano, 1 p.p. do 6.º ao 10.º);
+  juros trimestrais no dia da subscrição (dia inexistente → dia 1 do mês seguinte), capitalizados líquidos de IRS
+  (28 %); reembolso no 10.º aniversário.
+- **Cenários, não previsão:** o valor final depende da Euribor futura. Mínimo (taxa base 0 %) e máximo (3,5 %) são
+  limites das regras; o do meio usa a taxa base atual escrita pelo dono (constante até ao fim).
+- **Parte do valor unitário do último extrato** (não do histórico de taxas, que a app não tem). Os vencimentos até
+  à data do extrato, inclusive, contam como capitalizados.
+- **Por confirmar:** juro do trimestre = taxa anual ÷ 4 e valor unitário arredondado às 5 casas em cada
+  vencimento (a Portaria não diz). O ecrã mostra o valor unitário previsto para o próximo vencimento, para comparar
+  com o extrato seguinte. O arredondamento pesa menos de 1 € no total.
+- **A série valida-se no código**, não num CHECK: acrescentar a série F não obriga a refazer a tabela.
+- Sem ligação ao saldo do check-in: o saldo da plataforma continua a ser o que conta para o património.
+- Contas em `Fraction`; dinheiro em cêntimos; valor unitário em centésimas de milésima; taxas em milésimas de p.p.
+
+**O que mudou**
+- `app/db.py`: esquema v7. `app/backup.py`: `subscricoes_aforro.csv`. `app/restauro.py`: tabela opcional.
+- `app/aforro.py` (novo): regras da série, datas de vencimento, capitalização, cenários, validação, gravação,
+  taxa base atual (em `configuracao`).
+- `app/main.py`: rotas `/aforro` (lista, criar, editar, apagar, `/aforro/taxa`); filtros `data`, `inteiro`, `vu`,
+  `taxa`; o painel recebe `aforro`.
+- `app/templates/aforro.html` e `_aforro_resumo.html` (novos); `dashboard.html` (secção antes de "Planos");
+  `base.html` (ligação na barra lateral); `pwm.css`.
+- `scripts/seed_demo.py`: uma subscrição fictícia e taxa base 2,8 %.
+- Testes: `tests/test_aforro.py` (novo), `tests/test_main_aforro.py` (novo), `tests/test_migracao.py` (+3, com o
+  esquema exato da v6 em `tests/esquema_v6.sql`), `tests/test_seed_demo.py` (+1), `tests/test_restauro.py`.
+
+**Verificado:** 561 testes (Python 3.13, cloud). No Chromium com a demo: `/aforro` e painel sem erros de
+JavaScript e sem scroll horizontal a 1280 e 420 px; "Guardar e sair" pergunta com a taxa base alterada.
+**Por confirmar no Windows:** migração 6 → 7 no arranque e `subscricoes_aforro.csv` na cópia de segurança.
 
 ---
 
