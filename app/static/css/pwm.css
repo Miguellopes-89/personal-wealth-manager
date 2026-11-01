@@ -249,3 +249,13 @@ label.opcao { display: flex; gap: .5rem; align-items: center; font-size: .9rem; 
 /* ---------- Desafio no painel ---------- */
 .desafio-partes { margin: .35rem 0 0; padding-left: 1.1rem; }
 .desafio-partes li { margin: .1rem 0; }
+
+/* ---------- Certificados de Aforro ---------- */
+.aforro-sub + .aforro-sub { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--linha); }
+.aforro-topo { display: flex; flex-wrap: wrap; gap: .2rem .75rem; align-items: baseline; margin-bottom: .5rem; }
+.tabela-aforro { width: 100%; border-collapse: collapse; }
+.tabela-aforro th { text-align: left; font-weight: 400; padding: .4rem 0; }
+.tabela-aforro td { padding: .4rem 0 .4rem 1rem; white-space: nowrap; }
+.tabela-aforro tr:last-child th, .tabela-aforro tr:last-child td { border-bottom: 0; }
+.tabela-aforro tr.destaque th, .tabela-aforro tr.destaque td:nth-child(2) { font-weight: 600; }
+.aforro-total { margin: 1rem 0 0; }

@@ -194,6 +194,14 @@
 {% endfor %}
 </section>
 
+{% if aforro %}
+<h2>Certificados de Aforro</h2>
+<section class="caixa aforro" aria-label="Certificados de Aforro">
+  {% include "_aforro_resumo.html" %}
+  <p class="sub dica"><a href="/aforro">Subscrições e taxa base</a></p>
+</section>
+{% endif %}
+
 <h2>Planos</h2>
 <section class="caixa">
   {% for d in painel.desafios %}

@@ -1,0 +1,40 @@
+{# Simulação dos Certificados de Aforro: uma caixa por subscrição. Usado no painel e em /aforro. Precisa de `aforro`. #}
+{% for p in aforro.projecoes %}{% set s = p.subscricao %}
+<div class="aforro-sub">
+  <div class="aforro-topo">
+    <strong>{{ s.plataforma }} · série {{ s.serie }}</strong>
+    <span class="sub">subscrita a {{ s.data_subscricao|data }} · {{ s.unidades|inteiro }} unidades ·
+      {% if p.vencida %}venceu a {{ p.vencimento|data }}{% else %}vence a {{ p.vencimento|data }} ({{ p.trimestres_em_falta }} trimestres){% endif %}</span>
+  </div>
+  <table class="tabela-aforro">
+    <tbody>
+      <tr><th>Hoje <span class="sub">(extrato de {{ s.data_valor|data }}, {{ s.valor_unitario|vu }} por unidade)</span></th>
+        <td class="num"><strong>{{ s.valor_cent|eur }}</strong></td><td class="num"></td></tr>
+      {% if not p.vencida %}
+      {% for c in aforro.cenarios %}
+      <tr{% if c.codigo == 'atual' %} class="destaque"{% endif %}>
+        <th>No vencimento: {{ c.rotulo|lower }}{% if c.codigo == 'atual' %} <span class="sub">({{ c.taxa_base|taxa }} %)</span>{% endif %}</th>
+        <td class="num">{{ p.valor_final_cent[c.codigo]|eur }}</td>
+        <td class="num sub">+{{ (p.valor_final_cent[c.codigo] - s.valor_cent)|eur }}</td>
+      </tr>
+      {% endfor %}
+      {% endif %}
+    </tbody>
+  </table>
+  {% if p.proximo_vencimento and 'atual' in p.proximo_vu %}
+  <p class="sub dica">Próximo vencimento de juros a {{ p.proximo_vencimento|data }}: valor unitário previsto
+    {{ p.proximo_vu['atual']|vu }} com a taxa base atual. Compara com o extrato seguinte (a taxa deste trimestre foi
+    fixada no início do trimestre, por isso pode haver uma diferença pequena).</p>
+  {% endif %}
+</div>
+{% endfor %}
+{% if aforro.projecoes|length > 1 %}
+<p class="aforro-total"><strong>Total hoje {{ aforro.valor_hoje_cent|eur }}</strong>
+  {% for c in aforro.cenarios %}<span class="sub"> · {{ c.rotulo|lower }}: {{ aforro.total_final_cent[c.codigo]|eur }}</span>{% endfor %}</p>
+{% endif %}
+{% if aforro.taxa_atual is none %}
+<p class="aviso">Sem taxa base atual: só aparecem os limites. Escreve-a em <a href="/aforro#taxa">Certificados de Aforro</a>.</p>
+{% endif %}
+<p class="sub dica">Valores líquidos de IRS (28 %, retido em cada vencimento). O valor final depende da Euribor:
+  cada linha supõe a mesma taxa base até ao fim. O mínimo e o máximo são os limites das regras da série; o resgate
+  antecipado recebe o valor capitalizado até esse dia.</p>

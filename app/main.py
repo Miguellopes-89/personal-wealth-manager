@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import backup, calc, categorias, checkin, configuracao, dashboard, db, indices, plataformas
+from app import aforro, backup, calc, categorias, checkin, configuracao, dashboard, db, indices, plataformas
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["eur"] = calc.formatar_euros
@@ -29,6 +29,10 @@ def _pct(valor: float, unidade: str = " %") -> str:
 
 templates.env.filters["pct"] = _pct
 templates.env.filters["pp"] = lambda v: _pct(v, " p.p.")
+templates.env.filters["data"] = lambda d: d.strftime("%d/%m/%Y")
+templates.env.filters["inteiro"] = lambda n: f"{n:,}".replace(",", ".")
+templates.env.filters["vu"] = aforro.vu_para_texto
+templates.env.filters["taxa"] = aforro.taxa_para_texto
 
 AVISOS = {
     calc.AVISO_GANHO_NEGATIVO: "Ganho negativo: confirma o saldo e o aporte (erro de registo ou perda real).",
@@ -85,6 +89,7 @@ def _ecra_painel(request: Request, conn, *, despesa_texto=None, erro_despesa=Non
         "erro_despesa": erro_despesa,
         "msg": msg,
         "aviso_backup": aviso_backup,
+        "aforro": aforro.resumo(conn),
     }
     return templates.TemplateResponse(request, "dashboard.html", contexto, status_code=status_code)
 
@@ -625,5 +630,123 @@ def indice_acao(request: Request, indice_id: int, acao: str):
             return _ecra_indices(request, conn, erro_geral=str(exc), status_code=422)
         aviso = _backup_depois_de_mudar(conn)
         return _ecra_indices(request, conn, msg=msg, aviso_backup=aviso)
+    finally:
+        conn.close()
+
+
+# --- Certificados de Aforro (esquema v7) ---------------------------------------------------------------------
+
+def _form_aforro(s: aforro.Subscricao | None, plataformas_ativas) -> dict[str, str]:
+    if s is not None:
+        return {"plataforma_id": str(s.plataforma_id), "serie": s.serie,
+                "data_subscricao": s.data_subscricao.isoformat(), "unidades": str(s.unidades),
+                "valor_unitario": aforro.vu_para_texto(s.valor_unitario), "data_valor": s.data_valor.isoformat()}
+    # Por defeito, a plataforma com "aforro" no nome (se houver).
+    escolhida = next((p for p in plataformas_ativas if "aforro" in p["nome"].lower()), None)
+    return {"plataforma_id": str(escolhida["id"]) if escolhida else "", "serie": "E", "data_subscricao": "",
+            "unidades": "", "valor_unitario": "", "data_valor": date.today().isoformat()}
+
+
+def _ecra_aforro(request: Request, conn, *, editar=None, form=None, erros=None, msg=None, erro_geral=None,
+                 aviso_backup=None, taxa_texto=None, erro_taxa=None, status_code=200):
+    ativas = [p for p in plataformas.listar(conn) if p["ativa"] or (editar and p["id"] == editar.plataforma_id)]
+    taxa, taxa_data = aforro.obter_taxa(conn)
+    contexto = {
+        "aforro": aforro.resumo(conn), "lista": aforro.listar(conn), "editar": editar,
+        "form": form if form is not None else _form_aforro(editar, ativas), "erros": erros or {},
+        "plataformas": ativas, "msg": msg, "erro_geral": erro_geral, "aviso_backup": aviso_backup,
+        "taxa_texto": taxa_texto if taxa_texto is not None else (aforro.taxa_para_texto(taxa) if taxa is not None else ""),
+        "taxa_data": taxa_data, "erro_taxa": erro_taxa,
+    }
+    return templates.TemplateResponse(request, "aforro.html", contexto, status_code=status_code)
+
+
+def _subscricao_ou_404(request: Request, conn, subscricao_id: int):
+    s = aforro.obter(conn, subscricao_id)
+    if s is None:
+        return None, _ecra_aforro(request, conn, erro_geral="Subscrição inexistente.", status_code=404)
+    return s, None
+
+
+@app.get("/aforro", response_class=HTMLResponse)
+def aforro_ver(request: Request):
+    conn = db.connect()
+    try:
+        return _ecra_aforro(request, conn)
+    finally:
+        conn.close()
+
+
+@app.post("/aforro", response_class=HTMLResponse)
+async def aforro_criar(request: Request):
+    form = _form_texto(await request.form())
+    conn = db.connect()
+    try:
+        dados, erros = aforro.validar(conn, form, date.today())
+        if erros:
+            return _ecra_aforro(request, conn, form=form, erros=erros, status_code=422)
+        aforro.criar(conn, dados)
+        aviso = _backup_depois_de_mudar(conn)
+        return _ecra_aforro(request, conn, msg="Subscrição acrescentada.", aviso_backup=aviso)
+    finally:
+        conn.close()
+
+
+@app.post("/aforro/taxa", response_class=HTMLResponse)
+async def aforro_taxa(request: Request):
+    form = _form_texto(await request.form())
+    texto = form.get("taxa", "")
+    conn = db.connect()
+    try:
+        try:
+            taxa = aforro.taxa_de_texto(texto, aforro.SERIES["E"]) if texto.strip() else None
+        except ValueError as exc:
+            return _ecra_aforro(request, conn, taxa_texto=texto, erro_taxa=str(exc), status_code=422)
+        aforro.definir_taxa(conn, taxa, date.today())
+        aviso = _backup_depois_de_mudar(conn)
+        msg = "Taxa base apagada." if taxa is None else f"Taxa base de {aforro.taxa_para_texto(taxa)} % guardada."
+        return _ecra_aforro(request, conn, msg=msg, aviso_backup=aviso)
+    finally:
+        conn.close()
+
+
+@app.get("/aforro/{subscricao_id}", response_class=HTMLResponse)
+def aforro_ver_uma(request: Request, subscricao_id: int):
+    conn = db.connect()
+    try:
+        s, erro = _subscricao_ou_404(request, conn, subscricao_id)
+        return erro or _ecra_aforro(request, conn, editar=s)
+    finally:
+        conn.close()
+
+
+@app.post("/aforro/{subscricao_id}", response_class=HTMLResponse)
+async def aforro_editar(request: Request, subscricao_id: int):
+    form = _form_texto(await request.form())
+    conn = db.connect()
+    try:
+        s, erro = _subscricao_ou_404(request, conn, subscricao_id)
+        if erro:
+            return erro
+        dados, erros = aforro.validar(conn, form, date.today())
+        if erros:
+            return _ecra_aforro(request, conn, editar=s, form=form, erros=erros, status_code=422)
+        aforro.editar(conn, subscricao_id, dados)
+        aviso = _backup_depois_de_mudar(conn)
+        return _ecra_aforro(request, conn, msg="Subscrição atualizada.", aviso_backup=aviso)
+    finally:
+        conn.close()
+
+
+@app.post("/aforro/{subscricao_id}/apagar", response_class=HTMLResponse)
+def aforro_apagar(request: Request, subscricao_id: int):
+    conn = db.connect()
+    try:
+        s, erro = _subscricao_ou_404(request, conn, subscricao_id)
+        if erro:
+            return erro
+        aforro.apagar(conn, subscricao_id)
+        aviso = _backup_depois_de_mudar(conn)
+        return _ecra_aforro(request, conn, msg="Subscrição apagada.", aviso_backup=aviso)
     finally:
         conn.close()

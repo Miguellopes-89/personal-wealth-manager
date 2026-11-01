@@ -88,3 +88,13 @@ def test_demo_tem_indices_com_comparacao(conn):
     painel = dashboard.construir_painel(conn, date(2026, 9, 15))
     assert [c.nome for c in painel.comparacoes] == ["Ações mundo (ETF)", "Inflação (IPC)"]
     assert all(c.tudo is not None and c.tudo.n_meses == 2 for c in painel.comparacoes)
+
+
+def test_demo_tem_certificados_de_aforro_com_simulacao(conn):
+    from app import aforro
+
+    seed_demo.carregar(conn)
+    r = aforro.resumo(conn)
+    assert r is not None and len(r.projecoes) == 1 and r.taxa_atual == 2800
+    p = r.projecoes[0]
+    assert p.valor_final_cent["minimo"] < p.valor_final_cent["atual"] < p.valor_final_cent["maximo"]

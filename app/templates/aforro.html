@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block titulo %}Certificados de Aforro{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><h1>Certificados de Aforro</h1></div>
+
+{% if erro_geral %}<div class="banner erro">{{ erro_geral }}</div>{% endif %}
+{% if aviso_backup %}<div class="banner erro">{{ aviso_backup }}</div>{% endif %}
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+
+<p class="sub notas">Escreve cada subscrição tal como aparece no extrato da conta aforro (detalhe de saldos): data de
+  subscrição, unidades e valor unitário, com a data do extrato. A app simula o valor no vencimento a partir daí.
+  Atualiza o valor unitário quando tiveres um extrato novo. O saldo do check-in continua a ser o que conta para o
+  património.</p>
+
+{% if aforro %}
+<section class="caixa aforro">{% include "_aforro_resumo.html" %}</section>
+{% endif %}
+
+<h2 id="taxa">Taxa base atual da série E</h2>
+<form class="caixa linha-form" method="post" action="/aforro/taxa" data-avisar-sair{% if erro_taxa %} data-por-gravar{% endif %}>
+  <label>Taxa base (%)
+    <input type="text" inputmode="decimal" name="taxa" value="{{ taxa_texto }}"{% if erro_taxa %} class="erro"{% endif %} placeholder="ex.: 2,951">
+  </label>
+  <button type="submit" class="secundario">Guardar</button>
+  {% if erro_taxa %}<span class="msg-erro">{{ erro_taxa }}</span>{% endif %}
+  <span class="sub" style="flex-basis: 100%">A que o IGCP publica para o mês (Euribor a 3 meses + 1 p.p., entre 0 % e 3,5 %), sem o prémio de permanência.
+    {% if taxa_data %}Escrita a {{ taxa_data|data }}.{% endif %} Em branco apaga.</span>
+</form>
+
+<h2>Subscrições</h2>
+<div class="tabela">
+<table>
+  <thead><tr><th>Subscrição</th><th class="num">Unidades</th><th class="num">Valor unitário</th><th></th></tr></thead>
+  <tbody>
+  {% for s in lista %}
+    <tr{% if editar and s.id == editar.id %} class="a-editar"{% endif %}>
+      <td>{{ s.data_subscricao|data }} · série {{ s.serie }}<div class="sub">{{ s.plataforma }}</div></td>
+      <td class="num">{{ s.unidades|inteiro }}</td>
+      <td class="num">{{ s.valor_unitario|vu }}<div class="sub">a {{ s.data_valor|data }}</div></td>
+      <td><a href="/aforro/{{ s.id }}#formulario">Editar</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="sub">Ainda não há subscrições.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2 id="formulario">{% if editar %}Editar subscrição de {{ editar.data_subscricao|data }}{% else %}Nova subscrição{% endif %}</h2>
+<form class="caixa formulario" method="post" action="{% if editar %}/aforro/{{ editar.id }}{% else %}/aforro{% endif %}" data-avisar-sair{% if erros %} data-por-gravar{% endif %}>
+  <div class="grelha">
+    <label class="campo">Plataforma
+      <select name="plataforma_id"{% if erros.plataforma_id %} class="erro"{% endif %}>
+        {% for p in plataformas %}<option value="{{ p.id }}"{% if form.plataforma_id == p.id|string %} selected{% endif %}>{{ p.nome }}</option>{% endfor %}
+      </select>
+      {% if erros.plataforma_id %}<span class="msg-erro">{{ erros.plataforma_id }}</span>{% endif %}
+    </label>
+    <label class="campo">Série
+      <select name="serie"><option value="E" selected>Série E</option></select>
+      {% if erros.serie %}<span class="msg-erro">{{ erros.serie }}</span>{% endif %}
+    </label>
+    <label class="campo">Data de subscrição
+      <input type="date" name="data_subscricao" value="{{ form.data_subscricao }}" required{% if erros.data_subscricao %} class="erro"{% endif %}>
+      {% if erros.data_subscricao %}<span class="msg-erro">{{ erros.data_subscricao }}</span>{% endif %}
+    </label>
+    <label class="campo">Unidades
+      <input type="text" inputmode="numeric" name="unidades" value="{{ form.unidades }}" required placeholder="ex.: 1000"{% if erros.unidades %} class="erro"{% endif %}>
+      {% if erros.unidades %}<span class="msg-erro">{{ erros.unidades }}</span>{% endif %}
+    </label>
+    <label class="campo">Valor unitário
+      <input type="text" inputmode="decimal" name="valor_unitario" value="{{ form.valor_unitario }}" required placeholder="ex.: 1,05123"{% if erros.valor_unitario %} class="erro"{% endif %}>
+      {% if erros.valor_unitario %}<span class="msg-erro">{{ erros.valor_unitario }}</span>{% endif %}
+      <span class="sub">Como no extrato, com 5 casas decimais.</span>
+    </label>
+    <label class="campo">Data do extrato
+      <input type="date" name="data_valor" value="{{ form.data_valor }}" required{% if erros.data_valor %} class="erro"{% endif %}>
+      {% if erros.data_valor %}<span class="msg-erro">{{ erros.data_valor }}</span>{% endif %}
+    </label>
+  </div>
+  <div class="fim">
+    <button type="submit">{% if editar %}Guardar alterações{% else %}Acrescentar subscrição{% endif %}</button>
+    {% if editar %}<a href="/aforro">Cancelar</a>{% endif %}
+  </div>
+</form>
+
+{% if editar %}
+<div class="zona-acoes">
+  <form class="caixa" method="post" action="/aforro/{{ editar.id }}/apagar">
+    <strong>Apagar</strong> <span class="sub">Por exemplo, depois de um resgate total. Não mexe nos saldos do check-in.</span>
+    <button type="submit" class="perigo">Apagar</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

@@ -17,7 +17,7 @@ import os
 import sqlite3
 from datetime import date
 
-from app import checkin, configuracao, db, indices, planos
+from app import aforro, checkin, configuracao, db, indices, planos
 
 # nome, categoria, titular, plano mensal (€), calcula ganho, entra na alocação
 PLATAFORMAS = [
@@ -46,6 +46,10 @@ INDICES = [
     ("Ações mundo (ETF)", "investimento", ["100", "101,2", "100,4"]),
     ("Inflação (IPC)", None, ["118,1", "118,3", "118,6"]),
 ]
+
+# Certificados de Aforro fictícios (v7): plataforma, data de subscrição, unidades, valor unitário no último extrato.
+AFORRO = ("Certificados de Poupança", date(2023, 3, 20), 3000, "1,07215")
+AFORRO_TAXA_BASE = "2,8"
 
 # Plataformas com ganho: saldo inicial (€) e rendimento mensal fictício.
 INICIAL_EUR = {
@@ -139,6 +143,15 @@ def carregar(conn: sqlite3.Connection) -> None:
             indices.gravar_valores_varios(conn, cur.lastrowid, {
                 checkin.mes_de(leitura): indices.valor_de_texto(t) for leitura, t in zip(LEITURAS, textos)
             })
+
+        nome, data_sub, unidades, vu = AFORRO
+        pid = conn.execute("SELECT id FROM plataformas WHERE nome = ?", (nome,)).fetchone()[0]
+        conn.execute(
+            """INSERT INTO subscricoes_aforro (plataforma_id, serie, data_subscricao, unidades, valor_unitario, data_valor)
+               VALUES (?, 'E', ?, ?, ?, ?)""",
+            (pid, data_sub.isoformat(), unidades, aforro.vu_de_texto(vu), LEITURAS[-1].isoformat()),
+        )
+    aforro.definir_taxa(conn, aforro.taxa_de_texto(AFORRO_TAXA_BASE, aforro.SERIES["E"]), LEITURAS[-1])
 
 
 def main() -> int:
