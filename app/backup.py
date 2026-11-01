@@ -26,6 +26,7 @@ from app import db
 TABELAS = (
     "categorias", "plataformas", "registos_mensais", "planos", "configuracao", "depositos_desafio",
     "indices", "valores_indice",  # v6: os índices antes dos seus valores
+    "subscricoes_aforro",  # v7
 )
 PADRAO_PASTA = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
 _PADRAO_TEMPORARIA = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}\.tmp$")

@@ -25,7 +25,8 @@ from app import backup, db
 COLUNAS_OPCIONAIS = {"registos_mensais": ("data_leitura",)}
 # Tabelas acrescentadas em versões posteriores: uma cópia antiga sem o CSV restaura-se com a tabela vazia.
 # `categorias` (v5): uma cópia antiga sem o CSV fica com as categorias de origem, as únicas que existiam até à v4.
-TABELAS_OPCIONAIS = ("categorias", "configuracao", "depositos_desafio", "indices", "valores_indice")
+TABELAS_OPCIONAIS = ("categorias", "configuracao", "depositos_desafio", "indices", "valores_indice",
+                      "subscricoes_aforro")
 
 
 def ultima_copia(pasta_base: Path) -> Path:

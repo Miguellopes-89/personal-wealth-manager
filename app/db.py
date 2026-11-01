@@ -9,10 +9,11 @@ import os
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 # 2: registos_mensais.data_leitura; 3: tabela configuracao; 4: tabela depositos_desafio;
 # 5: tabela categorias (editáveis na app) e plataformas.categoria passa a apontar para ela;
 # 6: tabelas indices e valores_indice (comparação com índices de referência)
+# 7: tabela subscricoes_aforro (simulação do valor dos Certificados de Aforro no vencimento)
 
 # Categorias criadas com a base (ou na migração para a v5): (código, nome no ecrã, cor).
 # Depois disso vivem na tabela `categorias` e editam-se na app; o código nunca muda.
@@ -130,6 +131,19 @@ CREATE TABLE IF NOT EXISTS valores_indice (
     valor     INTEGER NOT NULL CHECK (valor > 0),
     PRIMARY KEY (indice_id, mes)
 ) WITHOUT ROWID;
+
+-- Subscrições de Certificados de Aforro (v7), tal como aparecem no extrato do IGCP: uma linha por subscrição.
+-- `valor_unitario` em centésimas de milésima de euro (1,08734 -> 108734), como o IGCP o mostra (5 casas), lido no
+-- extrato de `data_valor`. A série valida-se no código (app/aforro.py): uma série nova não obriga a refazer a tabela.
+CREATE TABLE IF NOT EXISTS subscricoes_aforro (
+    id              INTEGER PRIMARY KEY,
+    plataforma_id   INTEGER NOT NULL REFERENCES plataformas(id) ON DELETE RESTRICT,
+    serie           TEXT    NOT NULL,
+    data_subscricao TEXT    NOT NULL CHECK (COALESCE(date(data_subscricao) = data_subscricao, 0)),
+    unidades        INTEGER NOT NULL CHECK (unidades > 0),
+    valor_unitario  INTEGER NOT NULL CHECK (valor_unitario >= 100000),
+    data_valor      TEXT    NOT NULL CHECK (COALESCE(date(data_valor) = data_valor, 0) AND data_valor >= data_subscricao)
+);
 """
 
 
@@ -200,7 +214,8 @@ def _migrar(conn: sqlite3.Connection) -> None:
     """Atualiza uma base criada por uma versão anterior do esquema, sem perder dados."""
     if "data_leitura" not in _colunas(conn, "registos_mensais"):  # versão 1 -> 2
         conn.execute(f"ALTER TABLE registos_mensais ADD COLUMN {_COLUNA_DATA_LEITURA}")
-    # 2 -> 3, 3 -> 4 e 5 -> 6: as tabelas configuracao, depositos_desafio, indices e valores_indice são criadas
+    # 2 -> 3, 3 -> 4, 5 -> 6 e 6 -> 7: as tabelas configuracao, depositos_desafio, indices, valores_indice e
+    # subscricoes_aforro são criadas
     # pelo CREATE TABLE IF NOT EXISTS do SCHEMA; uma base antiga fica com elas vazias.
     sql = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'plataformas'").fetchone()[0]
     if _MARCA_V5 not in sql:  # 4 -> 5

@@ -366,7 +366,7 @@ def test_base_v5_migra_para_v6_sem_perder_dados(tmp_path):
 
     db.init_db(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 6
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert _conteudo(conn, TABELAS_V5) == antes  # inclui a categoria criada na app e os nomes editados
     assert conn.execute("SELECT COUNT(*) FROM indices").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM valores_indice").fetchone()[0] == 0
@@ -433,3 +433,75 @@ def test_restaura_copia_v5_sem_csv_dos_indices(tmp_path):
     contagens = restauro.restaurar(copia, tmp_path / "restaurada.db")
 
     assert contagens["indices"] == 0 and contagens["valores_indice"] == 0 and contagens["plataformas"] == 2
+
+
+# --- Versão 6 -> 7: subscrições de Certificados de Aforro -----------------------------------------------------
+
+ESQUEMA_V6 = (Path(__file__).parent / "esquema_v6.sql").read_text(encoding="utf-8")
+TABELAS_V6 = TABELAS_V5 + ("indices", "valores_indice")
+
+
+def _base_v6(caminho):
+    conn = db.connect(caminho)
+    conn.executescript(ESQUEMA_V6)
+    conn.executescript(
+        """
+        INSERT INTO plataformas (id, nome, categoria, titular, ordem) VALUES (4, 'Poupança Exemplo', 'poupanca', 'Ana', 10);
+        INSERT INTO registos_mensais VALUES (4, '2026-10', 105000, 0, '2026-10-01');
+        INSERT INTO configuracao VALUES ('despesa_mensal_cent', 150000);
+        INSERT INTO indices (id, nome, perimetro) VALUES (1, 'Inflação', NULL);
+        INSERT INTO valores_indice VALUES (1, '2026-10', 1184200);
+        """
+    )
+    conn.commit()
+    return conn
+
+
+def test_base_v6_migra_para_v7_sem_perder_dados(tmp_path):
+    conn = _base_v6(tmp_path / "v6.db")
+    antes = _conteudo(conn, TABELAS_V6)
+
+    db.init_db(conn)
+
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 7
+    assert _conteudo(conn, TABELAS_V6) == antes
+    assert conn.execute("SELECT COUNT(*) FROM subscricoes_aforro").fetchone()[0] == 0
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    db.init_db(conn)  # idempotente
+    assert _conteudo(conn, TABELAS_V6) == antes
+
+
+def test_tabela_v7_valida_os_dados(tmp_path):
+    conn = _base_v6(tmp_path / "v6.db")
+    db.init_db(conn)
+    conn.execute("INSERT INTO subscricoes_aforro VALUES (1, 4, 'E', '2023-01-10', 1000, 105000, '2026-10-01')")
+    for sql in (
+        "INSERT INTO subscricoes_aforro VALUES (2, 9, 'E', '2023-01-10', 1000, 105000, '2026-10-01')",  # plataforma
+        "INSERT INTO subscricoes_aforro VALUES (2, 4, 'E', '2023-02-30', 1000, 105000, '2026-10-01')",  # data
+        "INSERT INTO subscricoes_aforro VALUES (2, 4, 'E', '2023-01-10', 0, 105000, '2026-10-01')",  # unidades
+        "INSERT INTO subscricoes_aforro VALUES (2, 4, 'E', '2023-01-10', 1000, 99999, '2026-10-01')",  # < 1 €
+        "INSERT INTO subscricoes_aforro VALUES (2, 4, 'E', '2023-01-10', 1000, 105000, '2022-12-01')",  # antes
+        "DELETE FROM plataformas WHERE id = 4",  # plataforma com subscrições
+    ):
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(sql)
+
+
+def test_copia_v7_restaura_subscricoes_e_copia_v6_tambem(tmp_path):
+    conn = _base_v6(tmp_path / "v6.db")
+    db.init_db(conn)
+    conn.execute("INSERT INTO subscricoes_aforro VALUES (1, 4, 'E', '2023-01-10', 1000, 105000, '2026-10-01')")
+    conn.commit()
+    copia = backup.exportar_csv(conn, tmp_path / "backup", agora=datetime(2026, 11, 1, 12, 0, 0))
+
+    contagens = restauro.restaurar(copia, tmp_path / "restaurada.db")
+    assert contagens["subscricoes_aforro"] == 1
+    nova = db.connect(tmp_path / "restaurada.db")
+    assert tuple(nova.execute("SELECT * FROM subscricoes_aforro").fetchone()) == (
+        1, 4, "E", "2023-01-10", 1000, 105000, "2026-10-01")
+    nova.close()
+
+    (copia / "subscricoes_aforro.csv").unlink()  # como uma cópia feita antes da v7
+    contagens = restauro.restaurar(copia, tmp_path / "restaurada_v6.db")
+    assert contagens["subscricoes_aforro"] == 0 and contagens["indices"] == 1
